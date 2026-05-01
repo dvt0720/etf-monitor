@@ -67,20 +67,19 @@
 <div class="error-toast" id="errorToast"></div>
 
 <script>
-// ====== 默认ETF池 ======
+// ====== 默认ETF池：追踪指数名 ======
 const DEFAULT_POOL = [
-  { code: '510300', name: '沪深300ETF', market: 1 },
-  { code: '510500', name: '中证500ETF', market: 1 },
-  { code: '510050', name: '上证50ETF', market: 1 },
-  { code: '510880', name: '红利ETF', market: 1 },
-  { code: '515180', name: '红利ETF基金', market: 1 },
-  { code: '515080', name: '中证红利ETF', market: 1 },
-  { code: '510230', name: '金融ETF', market: 1 },
-  { code: '159915', name: '创业板ETF', market: 0 },
-  { code: '512890', name: '红利低波ETF', market: 1 },
-  { code: '512800', name: '银行ETF', market: 1 },
-  { code: '512200', name: '房地产ETF', market: 1 },
-  { code: '512010', name: '医药ETF', market: 1 },
+  // 大盘指数
+  { code: '510050', name: '上证50', market: 1 },
+  { code: '510300', name: '沪深300', market: 1 },
+  { code: '510180', name: '上证180', market: 1 },
+  { code: '510500', name: '中证500', market: 1 },
+  // 高分红红利
+  { code: '510880', name: '上证红利', market: 1 },
+  { code: '515080', name: '中证红利', market: 1 },
+  { code: '515180', name: '中证红利(易方达)', market: 1 },
+  { code: '515100', name: '红利低波100', market: 1 },
+  { code: '159905', name: '深证红利', market: 0 },
 ];
 
 const WINDOW_DAYS = 750;
