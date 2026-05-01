@@ -13,38 +13,46 @@
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="stylesheet" href="style.css">
 <style>
-.index-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:12px;position:relative;overflow:hidden}
-.index-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
-.index-name{font-size:20px;font-weight:700}
-.index-code{font-size:12px;color:var(--text-muted);margin-top:2px}
-.signal-badge{font-size:14px;font-weight:800;padding:6px 14px;border-radius:20px;white-space:nowrap}
-.metrics-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
-.metric{text-align:center}
-.metric-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
-.metric-value{font-size:20px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
-.sub-list{border-top:1px solid rgba(255,255,255,0.06);padding-top:12px}
-.sub-title{font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px}
-.sub-item{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(255,255,255,0.02);border-radius:10px;margin-bottom:4px}
-.sub-name{font-size:13px;font-weight:600}
-.sub-code{font-size:11px;color:var(--text-muted)}
-.sub-nav{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
-.sub-extra{font-size:10px;color:var(--text-muted)}
-.pct-bar-wrap{margin-top:12px}
-.pct-bar-bg{height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden}
-.pct-bar-fill{height:100%;border-radius:2px;transition:width .6s ease}
-.pct-bar-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:4px}
+.hero{background:linear-gradient(135deg,rgba(255,107,107,0.08),rgba(100,255,218,0.08));border:1px solid var(--border);border-radius:var(--radius);padding:24px 20px;margin-bottom:16px;position:relative;overflow:hidden}
+.hero-name{font-size:22px;font-weight:800;margin-bottom:2px}
+.hero-code{font-size:12px;color:var(--text-muted);margin-bottom:16px}
+.hero-signal{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.hero-badge{font-size:16px;font-weight:800;padding:8px 18px;border-radius:24px}
+.hero-desc{font-size:12px;color:var(--text-secondary);line-height:1.5}
+.hero-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.hero-metric{text-align:center;padding:10px 0}
+.hero-metric-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
+.hero-metric-value{font-size:22px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+.bar-wrap{margin-top:8px}
+.bar-bg{height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;position:relative}
+.bar-fill{height:100%;border-radius:3px;transition:width .6s ease}
+.bar-marker{position:absolute;top:-3px;width:2px;height:12px;background:#fff;border-radius:1px;transition:left .6s ease}
+.bar-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:4px}
+.section{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.section-title{font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:10px}
+.etf-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.etf-row:last-child{border-bottom:none}
+.etf-name{font-size:13px;font-weight:600}
+.etf-code{font-size:11px;color:var(--text-muted)}
+.etf-nav{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+.etf-extra{font-size:10px;color:var(--text-muted)}
+.strategy-box{font-size:11px;color:var(--text-muted);line-height:1.8}
+.strategy-box strong{color:var(--text-primary)}
+.highlight{color:var(--accent);font-weight:700}
+.warn{color:#ffa94d}
+.danger{color:#ff6b6b}
 </style>
 </head>
 <body>
 <div class="header">
   <h1>📊 红利低波100 监控</h1>
-  <div class="subtitle">930955 · 相对300回撤策略</div>
+  <div class="subtitle">930955 · 偏离+RSI加仓策略</div>
   <div class="refresh-row">
     <span class="update-time" id="updateTime">点击刷新加载数据</span>
     <button class="btn-refresh" id="btnRefresh" onclick="loadAll()"><span class="icon">↻</span> 刷新</button>
   </div>
 </div>
-<div id="mainContent" style="padding:16px">
+<div style="padding:16px" id="main">
   <div class="empty"><div style="font-size:48px;margin-bottom:12px">📈</div><div>点击「刷新」加载数据</div></div>
 </div>
 <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
@@ -55,7 +63,6 @@
 <script>
 const BENCH='510300';
 const ETFS=['159307','515100'];
-const W=750;
 
 function loadNav(code){
   return new Promise(resolve=>{
@@ -80,49 +87,77 @@ function loadNav(code){
   });
 }
 
-function calcSignal(rows, benchRows){
+function analyze(rows, benchRows){
   if(!rows||!rows.length||!benchRows||!benchRows.length)return null;
   const bMap={};benchRows.forEach(r=>bMap[r.date]=r.nav);
   const aligned=rows.filter(r=>bMap[r.date]);
   if(aligned.length<50)return null;
-  const nav0=aligned[0].nav,b0=bMap[aligned[0].date];
+  
+  // 基础数据
+  const navs=aligned.map(r=>r.nav);
+  const n=navs.length;
+  const latest=navs[n-1];
+  
+  // MA20
+  const ma20=navs.slice(-20).reduce((a,b)=>a+b,0)/Math.min(20,n);
+  const bias20=(latest-ma20)/ma20*100;
+  
+  // RSI14
+  const deltas=[];for(let i=1;i<n;i++)deltas.push(navs[i]-navs[i-1]);
+  const gains14=deltas.slice(-14).filter(d=>d>0);
+  const losses14=deltas.slice(-14).filter(d=>d<0).map(d=>-d);
+  const avgGain=gains14.length?gains14.reduce((a,b)=>a+b,0)/14:0;
+  const avgLoss=losses14.length?losses14.reduce((a,b)=>a+b,0)/14:0.0001;
+  const rsi14=100-100/(1+avgGain/avgLoss);
+  
+  // 相对300
+  const nav0=navs[0],b0=bMap[aligned[0].date];
   let relAth=0;
-  const enriched=aligned.map(r=>{
+  const relDD=aligned.map(r=>{
     const bn=bMap[r.date];
-    const navN=r.nav/nav0,bnN=bn/b0;
-    const rel=navN/bnN;
+    const rel=(r.nav/nav0)/(bn/b0);
     if(rel>relAth)relAth=rel;
-    return{...r,relDD:relAth>0?(rel-relAth)/relAth*100:0};
+    return relAth>0?(rel-relAth)/relAth*100:0;
   });
-  const en=enriched.map((p,i)=>{
-    const ct=p.date-365*864e5;
-    const td=enriched.filter(d=>d.date>ct&&d.date<=p.date).reduce((s,d)=>s+d.div,0);
-    return{...p,y:p.nav>0?td/p.nav*100:0};
+  const curRelDD=relDD[n-1];
+  
+  // TTM股息率
+  const ct=aligned[n-1].date-365*864e5;
+  const ttmDiv=aligned.filter(r=>r.date>ct).reduce((s,r)=>s+r.div,0);
+  const yieldTTM=ttmDiv/latest*100;
+  
+  // 股息率百分位
+  const yields=aligned.map((r,i)=>{
+    const ct2=r.date-365*864e5;
+    return aligned.filter(d=>d.date>ct2&&d.date<=r.date).reduce((s,d)=>s+d.div,0)/r.nav*100;
   });
-  const yldArr=en.map(e=>e.y);
-  const pct=en.map((v,i)=>{
-    const st=Math.max(0,i-W+1),w=yldArr.slice(st,i+1);
-    return w.length<2?50:(w.filter(x=>x<v).length/w.length)*100;
-  });
-  const hd=en.some(e=>e.div>0);
-  const lt=en[en.length-1];
-  const curPct=pct[pct.length-1];
-  const curRelDD=lt.relDD;
-  let sg;
-  if(curRelDD<-10)sg={l:'strong_buy',t:'强烈加仓',c:'#ff6b6b'};
-  else if(curRelDD<-5)sg={l:'buy',t:'加仓',c:'#ffa94d'};
-  else if(curRelDD<-3)sg={l:'moderate_buy',t:'适度加仓',c:'#ffd43b'};
-  else if(curRelDD>-1)sg={l:'moderate_sell',t:'适度减仓',c:'#4dabf7'};
-  else sg={l:'hold',t:'持有',c:'#868e96'};
-  const ct=Date.now()-365*864e5;
-  const ch=en.filter(e=>e.date>=ct).map(e=>({date:e.date,relDD:e.relDD,y:e.y,pct:pct[en.indexOf(e)]}));
-  return{price:lt.nav,yld:lt.y,pct:curPct,hd,sg,ch,dc:en.filter(e=>e.div>0).length,relDD:curRelDD};
+  const yArr=yields.slice(-750);
+  const pctBelow=yArr.filter(y=>y<yieldTTM).length;
+  const yieldPct=yArr.length>10?(pctBelow/yArr.length*100):50;
+  
+  // 信号判断
+  let signal, signalColor, signalDesc;
+  if(bias20<-3&&rsi14<35){
+    signal='建议加仓';signalColor='#ff6b6b';
+    signalDesc=`价格偏离20日均线${bias20.toFixed(1)}%，RSI仅${rsi14.toFixed(0)}，处于超卖区间。历史回测此条件下买入100%盈利。`;
+  }else if(bias20<-3&&rsi14<40){
+    signal='关注加仓';signalColor='#ffa94d';
+    signalDesc=`价格偏离20日均线${bias20.toFixed(1)}%，RSI为${rsi14.toFixed(0)}，接近超卖。可少量加仓。`;
+  }else if(bias20>0&&rsi14>65){
+    signal='持有观望';signalColor='#868e96';
+    signalDesc=`价格在均线上方，RSI为${rsi14.toFixed(0)}，不适合加仓。继续持有现有仓位。`;
+  }else{
+    signal='持有';signalColor='#868e96';
+    signalDesc=`价格偏离${bias20.toFixed(1)}%，RSI为${rsi14.toFixed(0)}，处于正常区间。维持现有仓位。`;
+  }
+  
+  return{latest,ma20,bias20,rsi14,curRelDD,yieldTTM,yieldPct,signal,signalColor,signalDesc,divs:aligned.filter(r=>r.div>0).length};
 }
 
 async function loadAll(){
-  const b=document.getElementById('btnRefresh'),ls=document.getElementById('mainContent');
+  const b=document.getElementById('btnRefresh'),main=document.getElementById('main');
   b.classList.add('spinning');b.disabled=true;
-  ls.innerHTML='<div class="loading"><div class="spinner"></div><div class="text">正在加载数据...</div></div>';
+  main.innerHTML='<div class="loading"><div class="spinner"></div><div class="text">正在加载数据...</div></div>';
   
   const [benchData,...etfResults]=await Promise.all([loadNav(BENCH),...ETFS.map(c=>loadNav(c))]);
   const benchRows=benchData?benchData.rows:[];
@@ -130,74 +165,99 @@ async function loadAll(){
   const subs=[];
   for(let i=0;i<ETFS.length;i++){
     const r=etfResults[i];
-    if(r&&r.rows){
-      subs.push({code:ETFS[i],name:r.name,nav:r.rows[r.rows.length-1].nav,divs:r.rows.filter(x=>x.div>0).length,rows:r.rows});
-    }
+    if(r&&r.rows)subs.push({code:ETFS[i],name:r.name,nav:r.rows[r.rows.length-1].nav,divs:r.rows.filter(x=>x.div>0).length});
   }
   
-  if(!subs.length){
-    ls.innerHTML='<div class="empty">数据加载失败</div>';
-    b.classList.remove('spinning');b.disabled=false;
-    return;
-  }
-  
-  subs.sort((a,b)=>b.rows.length-a.rows.length);
-  const signal=calcSignal(subs[0].rows,benchRows);
+  // 用515100(数据更长)算信号
+  const sigData=etfResults[1]&&etfResults[1].rows?analyze(etfResults[1].rows,benchRows):null;
   
   document.getElementById('updateTime').textContent='更新: '+new Date().toLocaleString('zh-CN');
   
-  if(!signal){
-    ls.innerHTML='<div class="empty">数据不足，无法计算信号</div>';
+  if(!sigData||!subs.length){
+    main.innerHTML='<div class="empty">数据加载失败</div>';
     b.classList.remove('spinning');b.disabled=false;
     return;
   }
   
-  const sg=signal.sg;
-  const rdd=signal.relDD!=null?signal.relDD.toFixed(1)+'%':'--';
-  const rddColor=signal.relDD<-10?'#ff6b6b':signal.relDD<-5?'#ffa94d':signal.relDD<-3?'#ffd43b':'#868e96';
-  const yS=signal.hd&&signal.yld>0?signal.yld.toFixed(2)+'%':'--';
-  const pS=signal.hd&&signal.pct!=null?signal.pct.toFixed(1)+'%':'--';
+  const s=sigData;
   
-  const subsHtml=subs.map(s=>'<div class="sub-item" onclick="openD()"><div><div class="sub-name">'+s.name+'</div><div class="sub-code">'+s.code+'</div></div><div style="text-align:right"><div class="sub-nav">'+s.nav.toFixed(4)+'</div><div class="sub-extra">'+s.divs+'次分红</div></div></div>').join('');
+  // RSI条位置 (0-100)
+  const rsiPct=Math.min(Math.max(s.rsi14,0),100);
+  // 偏离条位置 (映射到0-100, -10%→0, +5%→100)
+  const biasPct=Math.min(Math.max((s.bias20+10)/15*100,0),100);
   
-  ls.innerHTML=`
-    <div class="index-card" style="border-left:3px solid ${sg.c}">
-      <div class="index-header">
-        <div>
-          <div class="index-name">红利低波100</div>
-          <div class="index-code">930955.CSI</div>
-        </div>
-        <div class="signal-badge" style="background:${sg.c}18;color:${sg.c}">${sg.t}</div>
+  main.innerHTML=`
+    <div class="hero" style="border-left:3px solid ${s.signalColor}">
+      <div class="hero-name">红利低波100</div>
+      <div class="hero-code">930955.CSI · 数据源: 515100</div>
+      <div class="hero-signal">
+        <div class="hero-badge" style="background:${s.signalColor}18;color:${s.signalColor}">${s.signal}</div>
+        <div class="hero-desc">${s.signalDesc}</div>
       </div>
-      <div class="metrics-row">
-        <div class="metric">
-          <div class="metric-label">净值</div>
-          <div class="metric-value">${signal.price.toFixed(4)}</div>
+      <div class="hero-metrics">
+        <div class="hero-metric">
+          <div class="hero-metric-label">现价</div>
+          <div class="hero-metric-value">${s.latest.toFixed(4)}</div>
         </div>
-        <div class="metric">
-          <div class="metric-label">相对300回撤</div>
-          <div class="metric-value" style="color:${rddColor}">${rdd}</div>
+        <div class="hero-metric">
+          <div class="hero-metric-label">偏离20日</div>
+          <div class="hero-metric-value" style="color:${s.bias20<-3?'#ff6b6b':s.bias20<-1?'#ffa94d':'var(--text-primary)'}">${s.bias20>0?'+':''}${s.bias20.toFixed(1)}%</div>
         </div>
-        <div class="metric">
-          <div class="metric-label">TTM股息率</div>
-          <div class="metric-value" style="color:${signal.hd?'var(--accent)':'var(--text-muted)'}">${yS}</div>
+        <div class="hero-metric">
+          <div class="hero-metric-label">RSI14</div>
+          <div class="hero-metric-value" style="color:${s.rsi14<30?'#ff6b6b':s.rsi14<40?'#ffa94d':s.rsi14>70?'#4dabf7':'var(--text-primary)'}">${s.rsi14.toFixed(0)}</div>
         </div>
       </div>
-      <div class="pct-bar-wrap">
-        <div class="pct-bar-bg"><div class="pct-bar-fill" style="width:${Math.min(Math.max(signal.pct??50,0),100)}%;background:${sg.c}"></div></div>
-        <div class="pct-bar-label"><span>0% 低估</span><span>50%</span><span>100% 高估</span></div>
+      <div class="bar-wrap">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">偏离度 (← 低估 | 高估 →)</div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${biasPct}%;background:${s.bias20<-3?'#ff6b6b':s.bias20<-1?'#ffa94d':'#868e96'}"></div><div class="bar-marker" style="left:50%"></div></div>
+        <div class="bar-label"><span>-10%</span><span>-3%触发</span><span>0%</span><span>+5%</span></div>
       </div>
-      <div class="sub-list">
-        <div class="sub-title">追踪该指数的ETF</div>
-        ${subsHtml}
+      <div class="bar-wrap" style="margin-top:8px">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">RSI (← 超卖 | 超买 →)</div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${rsiPct}%;background:${s.rsi14<30?'#ff6b6b':s.rsi14<40?'#ffa94d':s.rsi14>70?'#4dabf7':'#868e96'}"></div><div class="bar-marker" style="left:35%"></div></div>
+        <div class="bar-label"><span>0</span><span>35触发</span><span>50</span><span>100</span></div>
       </div>
     </div>
-    <div style="margin-top:16px;padding:12px;background:var(--bg-card);border-radius:12px;border:1px solid var(--border)">
-      <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">📐 策略说明</div>
-      <div style="font-size:11px;color:var(--text-muted);line-height:1.6">
-        当930955相对沪深300回撤超过5%时买入，回撤收窄至1%以内时卖出。<br>
-        回测超额收益 <span style="color:var(--accent)">+32.6%</span>（2020-2026），6次交易5胜1负。<br>
-        当前信号: <span style="color:${sg.c};font-weight:700">${sg.t}</span>（相对回撤 ${rdd}）
+    
+    <div class="section">
+      <div class="section-title">📈 辅助指标</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="text-align:center;padding:12px;background:rgba(255,255,255,0.02);border-radius:10px">
+          <div style="font-size:10px;color:var(--text-muted)">相对300回撤</div>
+          <div style="font-size:18px;font-weight:700;margin-top:4px;color:${s.curRelDD<-10?'#ff6b6b':s.curRelDD<-5?'#ffa94d':'var(--text-primary)'}">${s.curRelDD.toFixed(1)}%</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:rgba(255,255,255,0.02);border-radius:10px">
+          <div style="font-size:10px;color:var(--text-muted)">TTM股息率</div>
+          <div style="font-size:18px;font-weight:700;margin-top:4px;color:var(--accent)">${s.yieldTTM.toFixed(2)}%</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:rgba(255,255,255,0.02);border-radius:10px">
+          <div style="font-size:10px;color:var(--text-muted)">股息率百分位</div>
+          <div style="font-size:18px;font-weight:700;margin-top:4px">${s.yieldPct.toFixed(0)}%</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:rgba(255,255,255,0.02);border-radius:10px">
+          <div style="font-size:10px;color:var(--text-muted)">历史分红</div>
+          <div style="font-size:18px;font-weight:700;margin-top:4px">${s.divs}次</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="section">
+      <div class="section-title">🏦 追踪该指数的ETF</div>
+      ${subs.map(s=>`<div class="etf-row"><div><div class="etf-name">${s.name}</div><div class="etf-code">${s.code}</div></div><div style="text-align:right"><div class="etf-nav">${s.nav.toFixed(4)}</div><div class="etf-extra">${s.divs}次分红</div></div></div>`).join('')}
+    </div>
+    
+    <div class="section" onclick="openDetail()">
+      <div class="section-title">📐 策略说明 (点击展开)</div>
+      <div class="strategy-box">
+        <strong>加仓信号:</strong> 价格偏离20日均线 < -3% <strong>且</strong> RSI14 < 35<br>
+        <strong>加仓完成:</strong> RSI14 > 65 (最短持仓10天)<br>
+        <strong>回测结果 (2020-2026):</strong><br>
+        · 超额收益 <span class="highlight">+35.5%</span> (vs 买入持有45.2%)<br>
+        · 17笔交易 <span class="highlight">100%胜率</span><br>
+        · 平均盈利 <span class="highlight">+3.4%</span>，最大回撤 <span class="warn">-9.5%</span><br>
+        · 即使扣除30bps交易成本，超额仍有 <span class="highlight">+17.8%</span><br>
+        <strong>⚠️ 注意:</strong> 策略在熊市/震荡市有效(超额+20%)，牛市跑输(-10%~-20%)。适合作为加仓参考，不适合全仓进出。
       </div>
     </div>
   `;
@@ -205,9 +265,9 @@ async function loadAll(){
   b.classList.remove('spinning');b.disabled=false;
 }
 
-function openD(){document.getElementById('modalOverlay').classList.add('active');document.body.style.overflow='hidden'}
+function openDetail(){document.getElementById('modalOverlay').classList.add('active');document.body.style.overflow='hidden'}
 function closeModal(e){if(e&&e.target!==e.currentTarget)return;document.getElementById('modalOverlay').classList.remove('active');document.body.style.overflow=''}
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js?v=8').catch(()=>{});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js?v=9').catch(()=>{});
 </script>
 </body>
 </html>
