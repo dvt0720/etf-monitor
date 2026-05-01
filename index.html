@@ -16,7 +16,7 @@
 <body>
 <div class="header">
   <h1>📊 ETF 股息率监控</h1>
-  <div class="subtitle">TTM股息率百分位 · 低估加仓 · 高估减仓</div>
+  <div class="subtitle">相对300回撤 · 低估加仓 · 高估减仓</div>
   <div class="refresh-row">
     <span class="update-time" id="updateTime">点击刷新加载数据</span>
     <button class="btn-refresh" id="btnRefresh" onclick="loadAll()"><span class="icon">↻</span> 刷新</button>
@@ -36,7 +36,7 @@
 <div class="filter-sort-bar">
   <div class="filter-chips" id="filterChips"></div>
   <div class="sort-group">
-    <button class="btn-sort active" data-sort="percentile" onclick="setSort('percentile')">百分位</button>
+    <button class="btn-sort active" data-sort="rel_dd" onclick="setSort('rel_dd')">相对回撤</button>
     <button class="btn-sort" data-sort="yield" onclick="setSort('yield')">股息率</button>
     <button class="btn-sort" data-sort="name" onclick="setSort('name')">名称</button>
   </div>
@@ -66,41 +66,91 @@ const P=[
   {index:'931447',name:'300红利低波',etf:'515300'},
   {index:'H30269',name:'红利低波',etf:'563020'},
 ];
+const BENCH='510300'; // 基准: 沪深300
 const W=750;
-let tT='default',tS='percentile',fils=new Set();
-const S=[{l:'strong_buy',t:'强烈加仓',c:'#ff6b6b'},{l:'buy',t:'加仓',c:'#ffa94d'},{l:'moderate_buy',t:'适度加仓',c:'#ffd43b'},{l:'hold',t:'持有',c:'#868e96'},{l:'moderate_sell',t:'适度减仓',c:'#4dabf7'},{l:'sell',t:'减仓',c:'#da77f2'},{l:'strong_sell',t:'强烈减仓',c:'#ff6b6b'},{l:'no_data',t:'无分红',c:'#bdc3c7'}];
+let tT='default',tS='rel_dd',fils=new Set();
+const S=[
+  {l:'strong_buy',t:'强烈加仓',c:'#ff6b6b'},
+  {l:'buy',t:'加仓',c:'#ffa94d'},
+  {l:'moderate_buy',t:'适度加仓',c:'#ffd43b'},
+  {l:'hold',t:'持有',c:'#868e96'},
+  {l:'moderate_sell',t:'适度减仓',c:'#4dabf7'},
+  {l:'sell',t:'减仓',c:'#da77f2'},
+  {l:'strong_sell',t:'强烈减仓',c:'#ff6b6b'},
+  {l:'no_data',t:'无分红',c:'#bdc3c7'}
+];
 function gP(){try{return JSON.parse(localStorage.getItem('etf_custom_pool')||'[]')}catch(e){return[]}}
 function sP(p){localStorage.setItem('etf_custom_pool',JSON.stringify(p))}
 
-function loadOne(item){
+/* 加载单个ETF的NAV+分红数据 */
+function loadNav(code){
   return new Promise(resolve=>{
-    const etfCode=item.etf||item.code;
     const s=document.createElement('script');let d=false;
     const tm=setTimeout(()=>{if(!d){d=true;s.remove();resolve(null)}},15000);
     s.onload=()=>{if(d)return;clearTimeout(tm);d=true;s.remove();
       try{
         const nav=window.Data_netWorthTrend,nm=window.fS_name;
         if(!nav||!nav.length){resolve(null);return}
-        const pr=[],dv=[];
-        for(const i of nav){pr.push({date:new Date(i.x),nav:i.y});
-          if(i.unitMoney&&typeof i.unitMoney==='string'){const m=i.unitMoney.match(/([\d.]+)\s*元/);if(m)dv.push({date:new Date(i.x),a:parseFloat(m[1])})}}
-        const en=pr.map(p=>{const c=new Date(p.date.getTime()-365*864e5);const td=dv.filter(d=>d.date>c&&d.date<=p.date).reduce((s,d)=>s+d.a,0);return{date:p.date,nav:p.nav,y:p.nav>0?td/p.nav:0}});
-        const hd=dv.length>0,yl=en.map(e=>e.y);
-        const pc=hd?yl.map((v,i)=>{const st=Math.max(0,i-W+1),w=yl.slice(st,i+1);return w.length<2?50:(w.filter(x=>x<v).length/w.length)*100}):[];
-        const lt=en[en.length-1],pct=hd?pc[pc.length-1]:null;
-        const sg=!hd?{l:'no_data',t:'无分红数据',c:'#bdc3c7'}:pct<=10?{l:'strong_buy',t:'强烈加仓',c:'#ff6b6b'}:pct<=25?{l:'buy',t:'加仓',c:'#ffa94d'}:pct<=40?{l:'moderate_buy',t:'适度加仓',c:'#ffd43b'}:pct<=60?{l:'hold',t:'持有',c:'#868e96'}:pct<=75?{l:'moderate_sell',t:'适度减仓',c:'#4dabf7'}:pct<=90?{l:'sell',t:'减仓',c:'#da77f2'}:{l:'strong_sell',t:'强烈减仓',c:'#ff6b6b'};
-        const ct=new Date(Date.now()-365*864e5);
-        const ch=hd?en.filter(e=>e.date>=ct).map(e=>({date:e.date,y:e.y*100,p:pc[en.indexOf(e)]})):[];
-        const isIdx=!!item.index;
-        resolve({
-          code:item.index||etfCode, name:isIdx?item.name:(nm||item.name), etf:etfCode,
-          price:lt.nav, yld:lt.y*100, pct, hd, sg, ch, dc:dv.length
-        });
+        const rows=[];
+        for(const i of nav){
+          const dt=new Date(i.x);
+          let div=0;
+          if(i.unitMoney&&typeof i.unitMoney==='string'){
+            const m=i.unitMoney.match(/([\d.]+)\s*元/);if(m)div=parseFloat(m[1])}
+          rows.push({date:dt.getTime(),nav:i.y,div});
+        }
+        resolve({name:nm,rows});
       }catch(e){resolve(null)}};
     s.onerror=()=>{if(!d){clearTimeout(tm);d=true;s.remove();resolve(null)}};
-    s.src='https://fund.eastmoney.com/pingzhongdata/'+etfCode+'.js';
+    s.src='https://fund.eastmoney.com/pingzhongdata/'+code+'.js';
     document.head.appendChild(s);
   });
+}
+
+/* 计算相对回撤信号 */
+function calcRelDD(rows, benchRows){
+  if(!rows||!rows.length||!benchRows||!benchRows.length)return null;
+  // 构建日期->NAV映射
+  const bMap={};benchRows.forEach(r=>bMap[r.date]=r.nav);
+  // 对齐日期
+  const aligned=rows.filter(r=>bMap[r.date]);
+  if(aligned.length<50)return null;
+  const nav0=aligned[0].nav,b0=bMap[aligned[0].date];
+  let relAth=0;
+  const enriched=aligned.map(r=>{
+    const bn=bMap[r.date];
+    const navN=r.nav/nav0,bnN=bn/b0;
+    const rel=navN/bnN;
+    if(rel>relAth)relAth=rel;
+    const relDD=relAth>0?(rel-relAth)/relAth*100:0;
+    return{...r,rel,relAth,relDD};
+  });
+  // TTM股息率
+  const en=enriched.map((p,i)=>{
+    const ct=p.date-365*864e5;
+    const td=enriched.filter(d=>d.date>ct&&d.date<=p.date).reduce((s,d)=>s+d.div,0);
+    return{...p,y:p.nav>0?td/p.nav*100:0};
+  });
+  const yldArr=en.map(e=>e.y);
+  const pct=en.map((v,i)=>{
+    const st=Math.max(0,i-W+1),w=yldArr.slice(st,i+1);
+    return w.length<2?50:(w.filter(x=>x<v).length/w.length)*100;
+  });
+  const hd=en.some(e=>e.div>0);
+  const lt=en[en.length-1];
+  const curPct=pct[pct.length-1];
+  const curRelDD=lt.relDD;
+  // 信号: 基于相对回撤
+  let sg;
+  if(curRelDD<-10)sg={l:'strong_buy',t:'强烈加仓',c:'#ff6b6b'};
+  else if(curRelDD<-5)sg={l:'buy',t:'加仓',c:'#ffa94d'};
+  else if(curRelDD<-3)sg={l:'moderate_buy',t:'适度加仓',c:'#ffd43b'};
+  else if(curRelDD>-1)sg={l:'moderate_sell',t:'适度减仓',c:'#4dabf7'};
+  else sg={l:'hold',t:'持有',c:'#868e96'};
+  // 近365天走势
+  const ct=Date.now()-365*864e5;
+  const ch=en.filter(e=>e.date>=ct).map(e=>({date:e.date,relDD:e.relDD,y:e.y,pct:pct[en.indexOf(e)]}));
+  return{name:lt.name,price:lt.nav,yld:lt.y,pct:curPct,hd,sg,ch,dc:en.filter(e=>e.div>0).length,relDD:curRelDD};
 }
 
 let dD=[],cD=[];
@@ -109,8 +159,33 @@ async function loadAll(){
   const pl=gP(),tot=P.length+pl.length;
   b.classList.add('spinning');b.disabled=true;
   ls.innerHTML='<div class="loading"><div class="spinner"></div><div class="text">正在加载 '+tot+' 只标的...</div></div>';
-  dD=[];for(const e of P){const r=await loadOne(e);if(r)dD.push(r)}
-  cD=[];for(const e of pl){const r=await loadOne(e);if(r)cD.push(r)}
+  // 先加载基准
+  const benchData=await loadNav(BENCH);
+  const benchRows=benchData?benchData.rows:[];
+  // 加载默认指数
+  dD=[];
+  for(const e of P){
+    const r=await loadNav(e.etf);
+    if(r&&r.rows){
+      const result=calcRelDD(r.rows,benchRows);
+      if(result){
+        result.code=e.index;result.etf=e.etf;
+        dD.push(result);
+      }
+    }
+  }
+  // 加载自定义
+  cD=[];
+  for(const e of pl){
+    const r=await loadNav(e.code);
+    if(r&&r.rows){
+      const result=calcRelDD(r.rows,benchRows);
+      if(result){
+        result.code=e.code;result.etf=e.code;
+        cD.push(result);
+      }
+    }
+  }
   document.getElementById('updateTime').textContent='更新: '+new Date().toLocaleString('zh-CN');
   document.getElementById('defaultCount').textContent=dD.length;
   document.getElementById('customCount').textContent=cD.length;
@@ -133,7 +208,7 @@ function switchTab(t){tT=t;document.querySelectorAll('.tab').forEach(x=>x.classL
 function rTab(){
   const raw=tT==='default'?dD:cD;
   let data=fils.size>0?raw.filter(d=>fils.has(d.sg.l)):raw;
-  if(tS==='percentile')data.sort((a,b)=>(a.hd?a.pct??50:999)-(b.hd?b.pct??50:999));
+  if(tS==='rel_dd')data.sort((a,b)=>(a.relDD??0)-(b.relDD??0)); // 最负的排最前
   else if(tS==='yield')data.sort((a,b)=>(b.hd?b.yld:-1)-(a.hd?a.yld:-1));
   else data.sort((a,b)=>a.name.localeCompare(b.name,'zh-CN'));
   const cnt={};raw.forEach(d=>{cnt[d.sg.l]=(cnt[d.sg.l]||0)+1});
@@ -143,13 +218,15 @@ function rTab(){
   if(!data.length){ls.innerHTML=fils.size>0?'<div class="empty">无匹配标的</div>':tT==='custom'?'<div class="empty">暂无自定义标的</div>':'<div class="empty">暂无数据</div>';return}
   const h=[];
   for(let i=0;i<data.length;i++){
-    const d=data[i],sg=d.sg,p=d.pct??50;
+    const d=data[i],sg=d.sg;
     const yS=d.hd&&d.yld>0?d.yld.toFixed(2)+'%':'--';
-    const pS=d.hd&&d.pct!=null?p.toFixed(1)+'%':'--';
+    const pS=d.hd&&d.pct!=null?d.pct.toFixed(1)+'%':'--';
     const rm=tT==='custom'?'<button class="btn-remove" onclick="event.stopPropagation();rmEtf(\''+d.code+'\')">×</button>':'';
-    const codeLabel=tT==='default'?d.code:'ETF '+d.code;
-    const subLabel=tT==='default'?'<div class="card-code">数据源: '+d.etf+'</div>':'<div class="card-code">'+d.code+'</div>';
-    h.push('<div class="etf-card" style="border-left:3px solid '+sg.c+'" onclick="openD(\''+d.code+'\')"><div class="card-top"><div><div class="card-name">'+d.name+'</div>'+subLabel+'</div><div style="display:flex;align-items:center;gap:6px"><div class="card-signal" style="background:'+sg.c+'18;color:'+sg.c+'">'+sg.t+'</div>'+rm+'</div></div><div class="card-metrics"><div class="metric"><div class="metric-label">净值</div><div class="metric-value">'+d.price.toFixed(4)+'</div></div><div class="metric"><div class="metric-label">TTM股息率</div><div class="metric-value" style="color:'+(d.hd?'var(--accent)':'var(--text-muted)')+'">'+yS+'</div></div><div class="metric"><div class="metric-label">百分位</div><div class="metric-value" style="color:'+sg.c+'">'+pS+'</div></div></div>'+(d.hd?'<div class="pct-bar-wrap"><div class="pct-bar-bg"><div class="pct-bar-fill" style="width:'+p+'%;background:'+sg.c+'"></div></div><div class="pct-bar-label"><span>0% 低估</span><span>50%</span><span>100% 高估</span></div></div>':'<div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">该ETF无现金分红记录</div>')+'</div>');
+    const subLabel=tT==='default'?'<div class="card-code">'+d.code+' · 数据源: '+d.etf+'</div>':'<div class="card-code">ETF '+d.code+'</div>';
+    // 相对回撤显示
+    const rdd=d.relDD!=null?d.relDD.toFixed(1)+'%':'--';
+    const rddColor=d.relDD<-10?'#ff6b6b':d.relDD<-5?'#ffa94d':d.relDD<-3?'#ffd43b':'#868e96';
+    h.push('<div class="etf-card" style="border-left:3px solid '+sg.c+'" onclick="openD(\''+d.code+'\')"><div class="card-top"><div><div class="card-name">'+d.name+'</div>'+subLabel+'</div><div style="display:flex;align-items:center;gap:6px"><div class="card-signal" style="background:'+sg.c+'18;color:'+sg.c+'">'+sg.t+'</div>'+rm+'</div></div><div class="card-metrics"><div class="metric"><div class="metric-label">净值</div><div class="metric-value">'+d.price.toFixed(4)+'</div></div><div class="metric"><div class="metric-label">相对300回撤</div><div class="metric-value" style="color:'+rddColor+'">'+rdd+'</div></div><div class="metric"><div class="metric-label">TTM股息率</div><div class="metric-value" style="color:'+(d.hd?'var(--accent)':'var(--text-muted)')+'">'+yS+'</div></div></div>'+(d.hd?'<div class="pct-bar-wrap"><div class="pct-bar-bg"><div class="pct-bar-fill" style="width:'+Math.min(Math.max(d.pct??50,0),100)+'%;background:'+sg.c+'"></div></div><div class="pct-bar-label"><span>0% 低估</span><span>50%</span><span>100% 高估</span></div></div>':'<div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">该标的无现金分红记录</div>')+'</div>');
   }
   ls.innerHTML=h.join('');
 }
@@ -157,17 +234,18 @@ function rTab(){
 function addEtf(){const i=document.getElementById('addInput'),c=i.value.trim();if(!c||!/^\d{6}$/.test(c)){showErr('请输入6位数字ETF代码');return}const p=gP();if(P.find(e=>e.etf===c||e.index===c)){showErr('已在默认列表中');return}if(p.find(e=>e.code===c)){showErr('已在自定义列表中');return}p.push({code:c,name:'ETF'+c});sP(p);i.value='';switchTab('custom');loadAll()}
 function rmEtf(c){sP(gP().filter(e=>e.code!==c));loadAll()}
 
-function openD(code){const d=[...dD,...cD].find(e=>e.code===code);if(!d)return;document.getElementById('modalOverlay').classList.add('active');document.body.style.overflow='hidden';const sg=d.sg,p=d.pct??50;const ds={strong_buy:'当前股息率处于历史极低位（前10%），可考虑大幅加仓',buy:'当前股息率处于历史低位（前25%），可考虑加仓',moderate_buy:'当前股息率低于中位数（前40%），可适度加仓',hold:'当前股息率处于中位区间（40-60%），维持现有仓位',moderate_sell:'当前股息率偏高（后40%），可适度减仓',sell:'当前股息率处于历史高位（后25%），可考虑减仓',strong_sell:'当前股息率处于历史极高位（后10%），建议大幅减仓',no_data:'该ETF暂无现金分红记录'};
-  let ch='';if(d.hd&&d.ch&&d.ch.length>10)ch='<div class="chart-container"><div class="chart-title">📈 股息率走势</div><canvas id="yieldChart"></canvas></div><div class="chart-container"><div class="chart-title">📊 百分位走势</div><canvas id="pctChart"></canvas></div>';
+function openD(code){const d=[...dD,...cD].find(e=>e.code===code);if(!d)return;document.getElementById('modalOverlay').classList.add('active');document.body.style.overflow='hidden';const sg=d.sg,p=d.pct??50;
+  const ds={strong_buy:'相对沪深300回撤超过10%，历史极端低位，可大幅加仓',buy:'相对沪深300回撤超过5%，低位区间，可加仓',moderate_buy:'相对沪深300回撤超过3%，可适度加仓',hold:'相对沪深300处于正常区间，维持现有仓位',moderate_sell:'相对沪深300回撤收窄至1%以内，可适度减仓',sell:'相对沪深300接近历史高位，可考虑减仓',strong_sell:'相对沪深300处于历史极端高位，建议大幅减仓',no_data:'该标的无现金分红记录'};
+  let ch='';if(d.ch&&d.ch.length>10)ch='<div class="chart-container"><div class="chart-title">📈 相对300回撤走势</div><canvas id="yieldChart"></canvas></div><div class="chart-container"><div class="chart-title">📊 股息率百分位走势</div><canvas id="pctChart"></canvas></div>';
   const srcLine=d.etf?'<div style="font-size:12px;color:var(--text-muted);margin-top:4px">数据源: '+d.etf+'</div>':'';
-  document.getElementById('modalContent').innerHTML='<div class="modal-header"><h2>'+d.name+'</h2><div class="code">'+d.code+'</div>'+srcLine+'</div><div class="detail-grid"><div class="detail-item"><div class="label">现价</div><div class="value">'+d.price.toFixed(4)+'</div></div><div class="detail-item"><div class="label">TTM股息率</div><div class="value" style="color:'+(d.hd?'var(--accent)':'var(--text-muted)')+'">'+(d.hd&&d.yld>0?d.yld.toFixed(2)+'%':'--')+'</div></div><div class="detail-item"><div class="label">百分位</div><div class="value" style="color:'+sg.c+'">'+(d.hd&&d.pct!=null?d.pct.toFixed(1)+'%':'--')+'</div></div><div class="detail-item"><div class="label">历史分红</div><div class="value">'+d.dc+'次</div></div></div><div class="signal-detail" style="border-left:3px solid '+sg.c+'"><div class="signal-text" style="color:'+sg.c+'">'+sg.t+'</div><div class="signal-desc">'+(ds[sg.l]||'')+'</div></div>'+ch;
-  if(d.hd&&d.ch&&d.ch.length>10)setTimeout(()=>{drawC('yieldChart',d.ch.map(c=>c.date),d.ch.map(c=>c.y),'rgba(100,255,218,0.8)','rgba(100,255,218,0.1)');drawC('pctChart',d.ch.map(c=>c.date),d.ch.map(c=>c.p),'rgba(218,119,242,0.8)','rgba(218,119,242,0.1)')},100);
+  document.getElementById('modalContent').innerHTML='<div class="modal-header"><h2>'+d.name+'</h2><div class="code">'+d.code+'</div>'+srcLine+'</div><div class="detail-grid"><div class="detail-item"><div class="label">现价</div><div class="value">'+d.price.toFixed(4)+'</div></div><div class="detail-item"><div class="label">相对300回撤</div><div class="value" style="color:'+(d.relDD<-5?'#ff6b6b':'#868e96')+'">'+(d.relDD!=null?d.relDD.toFixed(1)+'%':'--')+'</div></div><div class="detail-item"><div class="label">TTM股息率</div><div class="value" style="color:'+(d.hd?'var(--accent)':'var(--text-muted)')+'">'+(d.hd&&d.yld>0?d.yld.toFixed(2)+'%':'--')+'</div></div><div class="detail-item"><div class="label">股息率百分位</div><div class="value" style="color:'+sg.c+'">'+(d.hd&&d.pct!=null?p.toFixed(1)+'%':'--')+'</div></div></div><div class="signal-detail" style="border-left:3px solid '+sg.c+'"><div class="signal-text" style="color:'+sg.c+'">'+sg.t+'</div><div class="signal-desc">'+(ds[sg.l]||'')+'</div></div>'+ch;
+  if(d.ch&&d.ch.length>10)setTimeout(()=>{drawC('yieldChart',d.ch.map(c=>c.date),d.ch.map(c=>c.relDD),'rgba(100,255,218,0.8)','rgba(100,255,218,0.1)');drawC('pctChart',d.ch.map(c=>c.date),d.ch.map(c=>c.p),'rgba(218,119,242,0.8)','rgba(218,119,242,0.1)')},100);
 }
 function closeModal(e){if(e&&e.target!==e.currentTarget)return;document.getElementById('modalOverlay').classList.remove('active');document.body.style.overflow=''}
-function drawC(id,dates,data,st,fl){const cv=document.getElementById(id);if(!cv)return;const cx=cv.getContext('2d'),dp=devicePixelRatio||1,W=cv.parentElement.clientWidth-32,H=200;cv.width=W*dp;cv.height=H*dp;cv.style.width=W+'px';cv.style.height=H+'px';cx.scale(dp,dp);if(!data.length)return;const mn=Math.min(...data)*.9,mx=Math.max(...data)*1.1,rng=mx-mn||1,pT=24,pB=30,pL=40,pR=10,cW=W-pL-pR,cH=H-pT-pB;cx.strokeStyle='rgba(255,255,255,0.06)';cx.lineWidth=1;for(let i=0;i<=4;i++){const y=pT+(cH/4)*i;cx.beginPath();cx.moveTo(pL,y);cx.lineTo(W-pR,y);cx.stroke();cx.fillStyle='#5a6380';cx.font='10px sans-serif';cx.textAlign='right';cx.fillText((mx-(rng/4)*i).toFixed(1),pL-6,y+3)}const step=Math.max(1,Math.floor(data.length/5));cx.fillStyle='#5a6380';cx.font='10px sans-serif';cx.textAlign='center';for(let i=0;i<data.length;i+=step)cx.fillText(dates[i].getMonth()+1+'/'+dates[i].getDate(),pL+(i/(data.length-1))*cW,H-8);cx.beginPath();data.forEach((v,i)=>{const x=pL+(i/(data.length-1))*cW,y=pT+((mx-v)/rng)*cH;i===0?cx.moveTo(x,y):cx.lineTo(x,y)});cx.strokeStyle=st;cx.lineWidth=2;cx.lineJoin='round';cx.stroke();cx.lineTo(pL+cW,pT+cH);cx.lineTo(pL,pT+cH);cx.closePath();cx.fillStyle=fl;cx.fill();const lx=pL+cW,ly=pT+((mx-data[data.length-1])/rng)*cH;cx.beginPath();cx.arc(lx,ly,4,0,Math.PI*2);cx.fillStyle=st;cx.fill();cx.beginPath();cx.arc(lx,ly,2,0,Math.PI*2);cx.fillStyle='#fff';cx.fill();cx.fillStyle=st;cx.font='bold 11px sans-serif';cx.textAlign='right';cx.fillText(data[data.length-1].toFixed(2),lx-8,ly-8)}
+function drawC(id,dates,data,st,fl){const cv=document.getElementById(id);if(!cv)return;const cx=cv.getContext('2d'),dp=devicePixelRatio||1,W=cv.parentElement.clientWidth-32,H=200;cv.width=W*dp;cv.height=H*dp;cv.style.width=W+'px';cv.style.height=H+'px';cx.scale(dp,dp);if(!data.length)return;const mn=Math.min(...data)*1.1,mx=Math.max(...data)*1.1,rng=mx-mn||1,pT=24,pB=30,pL=40,pR=10,cW=W-pL-pR,cH=H-pT-pB;cx.strokeStyle='rgba(255,255,255,0.06)';cx.lineWidth=1;for(let i=0;i<=4;i++){const y=pT+(cH/4)*i;cx.beginPath();cx.moveTo(pL,y);cx.lineTo(W-pR,y);cx.stroke();cx.fillStyle='#5a6380';cx.font='10px sans-serif';cx.textAlign='right';cx.fillText((mx-(rng/4)*i).toFixed(1),pL-6,y+3)}const step=Math.max(1,Math.floor(data.length/5));cx.fillStyle='#5a6380';cx.font='10px sans-serif';cx.textAlign='center';for(let i=0;i<data.length;i+=step){const d=new Date(dates[i]);cx.fillText((d.getMonth()+1)+'/'+d.getDate(),pL+(i/(data.length-1))*cW,H-8)}cx.beginPath();data.forEach((v,i)=>{const x=pL+(i/(data.length-1))*cW,y=pT+((mx-v)/rng)*cH;i===0?cx.moveTo(x,y):cx.lineTo(x,y)});cx.strokeStyle=st;cx.lineWidth=2;cx.lineJoin='round';cx.stroke();cx.lineTo(pL+cW,pT+cH);cx.lineTo(pL,pT+cH);cx.closePath();cx.fillStyle=fl;cx.fill();const lx=pL+cW,ly=pT+((mx-data[data.length-1])/rng)*cH;cx.beginPath();cx.arc(lx,ly,4,0,Math.PI*2);cx.fillStyle=st;cx.fill();cx.beginPath();cx.arc(lx,ly,2,0,Math.PI*2);cx.fillStyle='#fff';cx.fill();cx.fillStyle=st;cx.font='bold 11px sans-serif';cx.textAlign='right';cx.fillText(data[data.length-1].toFixed(2),lx-8,ly-8)}
 function showErr(m){const t=document.getElementById('errorToast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}
 document.getElementById('addInput').addEventListener('keypress',e=>{if(e.key==='Enter')addEtf()});
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js?v=5').catch(()=>{});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js?v=6').catch(()=>{});
 </script>
 </body>
 </html>
