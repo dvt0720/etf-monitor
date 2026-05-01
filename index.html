@@ -41,6 +41,7 @@
     <button class="btn-sort" data-sort="name" onclick="setSort('name')">名称</button>
   </div>
 </div>
+<div id="summaryBar" class="summary-bar"></div>
 <div id="etfList" class="etf-list">
   <div class="empty"><div style="font-size:48px;margin-bottom:12px">📈</div><div>点击「刷新」加载ETF数据</div></div>
 </div>
@@ -52,9 +53,12 @@
 <script>
 const P=[
   {code:'510050',name:'上证50'},{code:'510300',name:'沪深300'},{code:'510180',name:'上证180'},
-  {code:'510500',name:'中证500'},{code:'510880',name:'上证红利'},{code:'515080',name:'中证红利'},
-  {code:'515180',name:'中证红利(易方达)'},{code:'515100',name:'红利低波100'},{code:'159905',name:'深证红利'},
-  {code:'515890',name:'红利质量'},{code:'513530',name:'港股通红利'},{code:'515300',name:'300红利低波'},
+  {code:'510500',name:'中证500'},
+  {code:'510880',name:'上证红利'},{code:'515080',name:'中证红利'},
+  {code:'515180',name:'红利ETF易方达'},{code:'515100',name:'红利低波100'},
+  {code:'159905',name:'深证红利'},{code:'515890',name:'红利质量'},
+  {code:'513530',name:'港股通红利'},{code:'515300',name:'300红利低波'},
+  {code:'563020',name:'红利低波ETF易方达'},{code:'159307',name:'红利低波100ETF博时'},
 ];
 const W=750;
 let tT='default',tS='percentile',fils=new Set();
@@ -106,7 +110,9 @@ async function loadAll(){
 function rChips(){
   const raw=tT==='default'?dD:cD,cnt={};
   raw.forEach(d=>{cnt[d.sg.l]=(cnt[d.sg.l]||0)+1});
-  document.getElementById('filterChips').innerHTML=
+  const el=document.getElementById('filterChips');
+  if(!el)return;
+  el.innerHTML=
     '<button class="filter-chip '+(fils.size===0?'active':'')+'" onclick="fils.clear();rChips();rTab()">全部</button>'+
     S.filter(s=>cnt[s.l]>0).map(s=>'<button class="filter-chip '+(fils.has(s.l)?'active':'')+'" onclick="fils.has(\''+s.l+'\')?fils.delete(\''+s.l+'\'):fils.add(\''+s.l+'\');rChips();rTab()" style="--chip-color:'+s.c+'">'+s.t+'<span class="chip-num">'+cnt[s.l]+'</span></button>').join('');
 }
@@ -120,7 +126,8 @@ function rTab(){
   else if(tS==='yield')data.sort((a,b)=>(b.hd?b.yld:-1)-(a.hd?a.yld:-1));
   else data.sort((a,b)=>a.name.localeCompare(b.name,'zh-CN'));
   const cnt={};raw.forEach(d=>{cnt[d.sg.l]=(cnt[d.sg.l]||0)+1});
-  document.getElementById('summaryBar').innerHTML=S.filter(s=>cnt[s.l]>0).map(s=>'<div class="summary-chip" style="border-color:'+s.c+'20"><span style="color:'+s.c+'">'+s.t+'</span><span class="count" style="color:'+s.c+'">'+cnt[s.l]+'</span></div>').join('');
+  const sb=document.getElementById('summaryBar');
+  if(sb)sb.innerHTML=S.filter(s=>cnt[s.l]>0).map(s=>'<div class="summary-chip" style="border-color:'+s.c+'20"><span style="color:'+s.c+'">'+s.t+'</span><span class="count" style="color:'+s.c+'">'+cnt[s.l]+'</span></div>').join('');
   const ls=document.getElementById('etfList');
   if(!data.length){ls.innerHTML=fils.size>0?'<div class="empty">无匹配标的</div>':tT==='custom'?'<div class="empty">暂无自定义标的</div>':'<div class="empty">暂无数据</div>';return}
   const h=[];
@@ -146,7 +153,7 @@ function closeModal(e){if(e&&e.target!==e.currentTarget)return;document.getEleme
 function drawC(id,dates,data,st,fl){const cv=document.getElementById(id);if(!cv)return;const cx=cv.getContext('2d'),dp=devicePixelRatio||1,W=cv.parentElement.clientWidth-32,H=200;cv.width=W*dp;cv.height=H*dp;cv.style.width=W+'px';cv.style.height=H+'px';cx.scale(dp,dp);if(!data.length)return;const mn=Math.min(...data)*.9,mx=Math.max(...data)*1.1,rng=mx-mn||1,pT=24,pB=30,pL=40,pR=10,cW=W-pL-pR,cH=H-pT-pB;cx.strokeStyle='rgba(255,255,255,0.06)';cx.lineWidth=1;for(let i=0;i<=4;i++){const y=pT+(cH/4)*i;cx.beginPath();cx.moveTo(pL,y);cx.lineTo(W-pR,y);cx.stroke();cx.fillStyle='#5a6380';cx.font='10px sans-serif';cx.textAlign='right';cx.fillText((mx-(rng/4)*i).toFixed(1),pL-6,y+3)}const step=Math.max(1,Math.floor(data.length/5));cx.fillStyle='#5a6380';cx.font='10px sans-serif';cx.textAlign='center';for(let i=0;i<data.length;i+=step)cx.fillText(dates[i].getMonth()+1+'/'+dates[i].getDate(),pL+(i/(data.length-1))*cW,H-8);cx.beginPath();data.forEach((v,i)=>{const x=pL+(i/(data.length-1))*cW,y=pT+((mx-v)/rng)*cH;i===0?cx.moveTo(x,y):cx.lineTo(x,y)});cx.strokeStyle=st;cx.lineWidth=2;cx.lineJoin='round';cx.stroke();cx.lineTo(pL+cW,pT+cH);cx.lineTo(pL,pT+cH);cx.closePath();cx.fillStyle=fl;cx.fill();const lx=pL+cW,ly=pT+((mx-data[data.length-1])/rng)*cH;cx.beginPath();cx.arc(lx,ly,4,0,Math.PI*2);cx.fillStyle=st;cx.fill();cx.beginPath();cx.arc(lx,ly,2,0,Math.PI*2);cx.fillStyle='#fff';cx.fill();cx.fillStyle=st;cx.font='bold 11px sans-serif';cx.textAlign='right';cx.fillText(data[data.length-1].toFixed(2),lx-8,ly-8)}
 function showErr(m){const t=document.getElementById('errorToast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}
 document.getElementById('addInput').addEventListener('keypress',e=>{if(e.key==='Enter')addEtf()});
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js?v=4').catch(()=>{});
 </script>
 </body>
 </html>
