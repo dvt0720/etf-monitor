@@ -110,18 +110,7 @@ function analyze(rows, benchRows){
   const avgLoss=losses14.length?losses14.reduce((a,b)=>a+b,0)/14:0.0001;
   const rsi14=100-100/(1+avgGain/avgLoss);
   
-  // 相对300
-  const nav0=navs[0],b0=bMap[aligned[0].date];
-  let relAth=0;
-  const relDD=aligned.map(r=>{
-    const bn=bMap[r.date];
-    const rel=(r.nav/nav0)/(bn/b0);
-    if(rel>relAth)relAth=rel;
-    return relAth>0?(rel-relAth)/relAth*100:0;
-  });
-  const curRelDD=relDD[n-1];
-  
-  // TTM股息率
+  // 信号判断
   const ct=aligned[n-1].date-365*864e5;
   const ttmDiv=aligned.filter(r=>r.date>ct).reduce((s,r)=>s+r.div,0);
   const yieldTTM=ttmDiv/latest*100;
@@ -151,7 +140,7 @@ function analyze(rows, benchRows){
     signalDesc=`价格偏离${bias20.toFixed(1)}%，RSI为${rsi14.toFixed(0)}，处于正常区间。维持现有仓位。`;
   }
   
-  return{latest,ma20,bias20,rsi14,curRelDD,yieldTTM,yieldPct,signal,signalColor,signalDesc,divs:aligned.filter(r=>r.div>0).length};
+  return{latest,ma20,bias20,rsi14,yieldTTM,yieldPct,signal,signalColor,signalDesc,divs:aligned.filter(r=>r.div>0).length};
 }
 
 async function loadAll(){
@@ -224,10 +213,6 @@ async function loadAll(){
       <div class="section-title">📈 辅助指标</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div style="text-align:center;padding:12px;background:rgba(255,255,255,0.02);border-radius:10px">
-          <div style="font-size:10px;color:var(--text-muted)">相对300回撤</div>
-          <div style="font-size:18px;font-weight:700;margin-top:4px;color:${s.curRelDD<-10?'#ff6b6b':s.curRelDD<-5?'#ffa94d':'var(--text-primary)'}">${s.curRelDD.toFixed(1)}%</div>
-        </div>
-        <div style="text-align:center;padding:12px;background:rgba(255,255,255,0.02);border-radius:10px">
           <div style="font-size:10px;color:var(--text-muted)">TTM股息率</div>
           <div style="font-size:18px;font-weight:700;margin-top:4px;color:var(--accent)">${s.yieldTTM.toFixed(2)}%</div>
         </div>
@@ -238,6 +223,10 @@ async function loadAll(){
         <div style="text-align:center;padding:12px;background:rgba(255,255,255,0.02);border-radius:10px">
           <div style="font-size:10px;color:var(--text-muted)">历史分红</div>
           <div style="font-size:18px;font-weight:700;margin-top:4px">${s.divs}次</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:rgba(255,255,255,0.02);border-radius:10px">
+          <div style="font-size:10px;color:var(--text-muted)">20日均线</div>
+          <div style="font-size:18px;font-weight:700;margin-top:4px">${s.ma20.toFixed(4)}</div>
         </div>
       </div>
     </div>
