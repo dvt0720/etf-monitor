@@ -1,4 +1,4 @@
-const CACHE_NAME = 'etf-monitor-v4';
+const CACHE_NAME = 'etf-monitor-v5';
 const STATIC = ['/style.css', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -13,7 +13,6 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  // HTML页面: 始终走网络（防止缓存404）
   if (url.pathname === '/' || url.pathname === '/index.html') {
     e.respondWith(fetch(e.request).then(r => {
       const clone = r.clone();
@@ -22,7 +21,6 @@ self.addEventListener('fetch', e => {
     }).catch(() => caches.match(e.request)));
     return;
   }
-  // 东方财富API: 网络优先
   if (url.hostname.includes('eastmoney.com')) {
     e.respondWith(fetch(e.request).then(r => {
       const clone = r.clone();
@@ -31,6 +29,5 @@ self.addEventListener('fetch', e => {
     }).catch(() => caches.match(e.request)));
     return;
   }
-  // 静态资源: 缓存优先
   e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
 });
