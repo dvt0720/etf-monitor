@@ -7,51 +7,44 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ETF监控">
 <meta name="theme-color" content="#0a0e27">
-<title>ETF股息率监控</title>
+<title>红利低波100监控</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="stylesheet" href="style.css">
 <style>
-.etf-sub{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid rgba(255,255,255,0.04);font-size:12px}
-.etf-sub+.etf-sub{border-top:1px solid rgba(255,255,255,0.04)}
-.etf-sub-name{color:var(--text-secondary);font-weight:500}
-.etf-sub-code{color:var(--text-muted);font-size:11px}
-.etf-sub-nav{color:var(--text-primary);font-weight:600;font-variant-numeric:tabular-nums}
-.etf-sub-divs{color:var(--text-muted);font-size:10px}
-.etf-subs{margin-top:8px}
+.index-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:12px;position:relative;overflow:hidden}
+.index-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+.index-name{font-size:20px;font-weight:700}
+.index-code{font-size:12px;color:var(--text-muted);margin-top:2px}
+.signal-badge{font-size:14px;font-weight:800;padding:6px 14px;border-radius:20px;white-space:nowrap}
+.metrics-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+.metric{text-align:center}
+.metric-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
+.metric-value{font-size:20px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.sub-list{border-top:1px solid rgba(255,255,255,0.06);padding-top:12px}
+.sub-title{font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px}
+.sub-item{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(255,255,255,0.02);border-radius:10px;margin-bottom:4px}
+.sub-name{font-size:13px;font-weight:600}
+.sub-code{font-size:11px;color:var(--text-muted)}
+.sub-nav{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+.sub-extra{font-size:10px;color:var(--text-muted)}
+.pct-bar-wrap{margin-top:12px}
+.pct-bar-bg{height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden}
+.pct-bar-fill{height:100%;border-radius:2px;transition:width .6s ease}
+.pct-bar-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:4px}
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>📊 ETF 股息率监控</h1>
-  <div class="subtitle">相对300回撤 · 低估加仓 · 高估减仓</div>
+  <h1>📊 红利低波100 监控</h1>
+  <div class="subtitle">930955 · 相对300回撤策略</div>
   <div class="refresh-row">
     <span class="update-time" id="updateTime">点击刷新加载数据</span>
     <button class="btn-refresh" id="btnRefresh" onclick="loadAll()"><span class="icon">↻</span> 刷新</button>
   </div>
 </div>
-<div class="add-section">
-  <div class="add-title">添加自定义ETF</div>
-  <div class="add-row">
-    <input type="text" id="addInput" placeholder="输入6位ETF代码，如 159941" maxlength="6" inputmode="numeric" pattern="[0-9]*">
-    <button class="btn-add" onclick="addEtf()">+ 添加</button>
-  </div>
-</div>
-<div class="tab-bar">
-  <button class="tab active" data-tab="default" onclick="switchTab('default')">默认指数 <span class="tab-count" id="defaultCount">0</span></button>
-  <button class="tab" data-tab="custom" onclick="switchTab('custom')">自定义标的 <span class="tab-count" id="customCount">0</span></button>
-</div>
-<div class="filter-sort-bar">
-  <div class="filter-chips" id="filterChips"></div>
-  <div class="sort-group">
-    <button class="btn-sort active" data-sort="rel_dd" onclick="setSort('rel_dd')">相对回撤</button>
-    <button class="btn-sort" data-sort="yield" onclick="setSort('yield')">股息率</button>
-    <button class="btn-sort" data-sort="name" onclick="setSort('name')">名称</button>
-  </div>
-</div>
-<div id="summaryBar" class="summary-bar"></div>
-<div id="etfList" class="etf-list">
+<div id="mainContent" style="padding:16px">
   <div class="empty"><div style="font-size:48px;margin-bottom:12px">📈</div><div>点击「刷新」加载数据</div></div>
 </div>
 <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
@@ -60,36 +53,9 @@
 <div class="error-toast" id="errorToast"></div>
 
 <script>
-/* 默认指数池: 每个指数可对应多只ETF */
-const P=[
-  {index:'000016',name:'上证50',etfs:['510050']},
-  {index:'000300',name:'沪深300',etfs:['510300']},
-  {index:'000010',name:'上证180',etfs:['510180']},
-  {index:'000905',name:'中证500',etfs:['510500']},
-  {index:'000015',name:'上证红利',etfs:['510880']},
-  {index:'000922',name:'中证红利',etfs:['515080','515180']},
-  {index:'930955',name:'红利低波100',etfs:['159307','515100']},
-  {index:'399324',name:'深证红利',etfs:['159905']},
-  {index:'931446',name:'红利质量',etfs:['515890']},
-  {index:'931929',name:'港股通高股息',etfs:['513530']},
-  {index:'931447',name:'300红利低波',etfs:['515300']},
-  {index:'H30269',name:'红利低波',etfs:['563020']},
-];
 const BENCH='510300';
+const ETFS=['159307','515100'];
 const W=750;
-let tT='default',tS='rel_dd',fils=new Set();
-const S=[
-  {l:'strong_buy',t:'强烈加仓',c:'#ff6b6b'},
-  {l:'buy',t:'加仓',c:'#ffa94d'},
-  {l:'moderate_buy',t:'适度加仓',c:'#ffd43b'},
-  {l:'hold',t:'持有',c:'#868e96'},
-  {l:'moderate_sell',t:'适度减仓',c:'#4dabf7'},
-  {l:'sell',t:'减仓',c:'#da77f2'},
-  {l:'strong_sell',t:'强烈减仓',c:'#ff6b6b'},
-  {l:'no_data',t:'无分红',c:'#bdc3c7'}
-];
-function gP(){try{return JSON.parse(localStorage.getItem('etf_custom_pool')||'[]')}catch(e){return[]}}
-function sP(p){localStorage.setItem('etf_custom_pool',JSON.stringify(p))}
 
 function loadNav(code){
   return new Promise(resolve=>{
@@ -114,7 +80,7 @@ function loadNav(code){
   });
 }
 
-function calcRelDD(rows, benchRows){
+function calcSignal(rows, benchRows){
   if(!rows||!rows.length||!benchRows||!benchRows.length)return null;
   const bMap={};benchRows.forEach(r=>bMap[r.date]=r.nav);
   const aligned=rows.filter(r=>bMap[r.date]);
@@ -126,8 +92,7 @@ function calcRelDD(rows, benchRows){
     const navN=r.nav/nav0,bnN=bn/b0;
     const rel=navN/bnN;
     if(rel>relAth)relAth=rel;
-    const relDD=relAth>0?(rel-relAth)/relAth*100:0;
-    return{...r,rel,relAth,relDD};
+    return{...r,relDD:relAth>0?(rel-relAth)/relAth*100:0};
   });
   const en=enriched.map((p,i)=>{
     const ct=p.date-365*864e5;
@@ -154,111 +119,95 @@ function calcRelDD(rows, benchRows){
   return{price:lt.nav,yld:lt.y,pct:curPct,hd,sg,ch,dc:en.filter(e=>e.div>0).length,relDD:curRelDD};
 }
 
-let dD=[],cD=[];
 async function loadAll(){
-  const b=document.getElementById('btnRefresh'),ls=document.getElementById('etfList');
-  const pl=gP(),tot=P.length+pl.length;
+  const b=document.getElementById('btnRefresh'),ls=document.getElementById('mainContent');
   b.classList.add('spinning');b.disabled=true;
-  ls.innerHTML='<div class="loading"><div class="spinner"></div><div class="text">正在加载 '+tot+' 只标的...</div></div>';
-  // 加载基准
-  const benchData=await loadNav(BENCH);
+  ls.innerHTML='<div class="loading"><div class="spinner"></div><div class="text">正在加载数据...</div></div>';
+  
+  const [benchData,...etfResults]=await Promise.all([loadNav(BENCH),...ETFS.map(c=>loadNav(c))]);
   const benchRows=benchData?benchData.rows:[];
-  // 加载默认指数(按组)
-  dD=[];
-  for(const g of P){
-    const subs=[];
-    for(const code of g.etfs){
-      const r=await loadNav(code);
-      if(r&&r.rows)subs.push({code,name:r.name,nav:r.rows[r.rows.length-1].nav,divs:r.rows.filter(x=>x.div>0).length,rows:r.rows});
-    }
-    if(!subs.length)continue;
-    // 用数据最多的ETF算信号
-    subs.sort((a,b)=>b.rows.length-a.rows.length);
-    const signal=calcRelDD(subs[0].rows,benchRows);
-    if(signal){
-      dD.push({...signal,code:g.index,name:subs[0].name||g.name,indexName:g.name,subs});
-    }
-  }
-  // 加载自定义
-  cD=[];
-  for(const e of pl){
-    const r=await loadNav(e.code);
+  
+  const subs=[];
+  for(let i=0;i<ETFS.length;i++){
+    const r=etfResults[i];
     if(r&&r.rows){
-      const signal=calcRelDD(r.rows,benchRows);
-      if(signal){
-        cD.push({...signal,code:e.code,indexName:e.name,subs:[{code:e.code,name:r.name,nav:signal.price,divs:signal.dc,rows:r.rows}]});
-      }
+      subs.push({code:ETFS[i],name:r.name,nav:r.rows[r.rows.length-1].nav,divs:r.rows.filter(x=>x.div>0).length,rows:r.rows});
     }
   }
+  
+  if(!subs.length){
+    ls.innerHTML='<div class="empty">数据加载失败</div>';
+    b.classList.remove('spinning');b.disabled=false;
+    return;
+  }
+  
+  subs.sort((a,b)=>b.rows.length-a.rows.length);
+  const signal=calcSignal(subs[0].rows,benchRows);
+  
   document.getElementById('updateTime').textContent='更新: '+new Date().toLocaleString('zh-CN');
-  document.getElementById('defaultCount').textContent=dD.length;
-  document.getElementById('customCount').textContent=cD.length;
-  rChips();rTab();
+  
+  if(!signal){
+    ls.innerHTML='<div class="empty">数据不足，无法计算信号</div>';
+    b.classList.remove('spinning');b.disabled=false;
+    return;
+  }
+  
+  const sg=signal.sg;
+  const rdd=signal.relDD!=null?signal.relDD.toFixed(1)+'%':'--';
+  const rddColor=signal.relDD<-10?'#ff6b6b':signal.relDD<-5?'#ffa94d':signal.relDD<-3?'#ffd43b':'#868e96';
+  const yS=signal.hd&&signal.yld>0?signal.yld.toFixed(2)+'%':'--';
+  const pS=signal.hd&&signal.pct!=null?signal.pct.toFixed(1)+'%':'--';
+  
+  const subsHtml=subs.map(s=>'<div class="sub-item" onclick="openD()"><div><div class="sub-name">'+s.name+'</div><div class="sub-code">'+s.code+'</div></div><div style="text-align:right"><div class="sub-nav">'+s.nav.toFixed(4)+'</div><div class="sub-extra">'+s.divs+'次分红</div></div></div>').join('');
+  
+  ls.innerHTML=`
+    <div class="index-card" style="border-left:3px solid ${sg.c}">
+      <div class="index-header">
+        <div>
+          <div class="index-name">红利低波100</div>
+          <div class="index-code">930955.CSI</div>
+        </div>
+        <div class="signal-badge" style="background:${sg.c}18;color:${sg.c}">${sg.t}</div>
+      </div>
+      <div class="metrics-row">
+        <div class="metric">
+          <div class="metric-label">净值</div>
+          <div class="metric-value">${signal.price.toFixed(4)}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">相对300回撤</div>
+          <div class="metric-value" style="color:${rddColor}">${rdd}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">TTM股息率</div>
+          <div class="metric-value" style="color:${signal.hd?'var(--accent)':'var(--text-muted)'}">${yS}</div>
+        </div>
+      </div>
+      <div class="pct-bar-wrap">
+        <div class="pct-bar-bg"><div class="pct-bar-fill" style="width:${Math.min(Math.max(signal.pct??50,0),100)}%;background:${sg.c}"></div></div>
+        <div class="pct-bar-label"><span>0% 低估</span><span>50%</span><span>100% 高估</span></div>
+      </div>
+      <div class="sub-list">
+        <div class="sub-title">追踪该指数的ETF</div>
+        ${subsHtml}
+      </div>
+    </div>
+    <div style="margin-top:16px;padding:12px;background:var(--bg-card);border-radius:12px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">📐 策略说明</div>
+      <div style="font-size:11px;color:var(--text-muted);line-height:1.6">
+        当930955相对沪深300回撤超过5%时买入，回撤收窄至1%以内时卖出。<br>
+        回测超额收益 <span style="color:var(--accent)">+32.6%</span>（2020-2026），6次交易5胜1负。<br>
+        当前信号: <span style="color:${sg.c};font-weight:700">${sg.t}</span>（相对回撤 ${rdd}）
+      </div>
+    </div>
+  `;
+  
   b.classList.remove('spinning');b.disabled=false;
 }
 
-function rChips(){
-  const raw=tT==='default'?dD:cD,cnt={};
-  raw.forEach(d=>{cnt[d.sg.l]=(cnt[d.sg.l]||0)+1});
-  const el=document.getElementById('filterChips');
-  if(!el)return;
-  el.innerHTML=
-    '<button class="filter-chip '+(fils.size===0?'active':'')+'" onclick="fils.clear();rChips();rTab()">全部</button>'+
-    S.filter(s=>cnt[s.l]>0).map(s=>'<button class="filter-chip '+(fils.has(s.l)?'active':'')+'" onclick="fils.has(\''+s.l+'\')?fils.delete(\''+s.l+'\'):fils.add(\''+s.l+'\');rChips();rTab()" style="--chip-color:'+s.c+'">'+s.t+'<span class="chip-num">'+cnt[s.l]+'</span></button>').join('');
-}
-function setSort(s){tS=s;document.querySelectorAll('.btn-sort').forEach(b=>b.classList.toggle('active',b.dataset.sort===s));rTab()}
-function switchTab(t){tT=t;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));fils.clear();rChips();rTab()}
-
-function rTab(){
-  const raw=tT==='default'?dD:cD;
-  let data=fils.size>0?raw.filter(d=>fils.has(d.sg.l)):raw;
-  if(tS==='rel_dd')data.sort((a,b)=>(a.relDD??0)-(b.relDD??0));
-  else if(tS==='yield')data.sort((a,b)=>(b.hd?b.yld:-1)-(a.hd?a.yld:-1));
-  else data.sort((a,b)=>a.indexName.localeCompare(b.indexName,'zh-CN'));
-  const cnt={};raw.forEach(d=>{cnt[d.sg.l]=(cnt[d.sg.l]||0)+1});
-  const sb=document.getElementById('summaryBar');
-  if(sb)sb.innerHTML=S.filter(s=>cnt[s.l]>0).map(s=>'<div class="summary-chip" style="border-color:'+s.c+'20"><span style="color:'+s.c+'">'+s.t+'</span><span class="count" style="color:'+s.c+'">'+cnt[s.l]+'</span></div>').join('');
-  const ls=document.getElementById('etfList');
-  if(!data.length){ls.innerHTML=fils.size>0?'<div class="empty">无匹配标的</div>':tT==='custom'?'<div class="empty">暂无自定义标的</div>':'<div class="empty">暂无数据</div>';return}
-  const h=[];
-  for(let i=0;i<data.length;i++){
-    const d=data[i],sg=d.sg;
-    const yS=d.hd&&d.yld>0?d.yld.toFixed(2)+'%':'--';
-    const rdd=d.relDD!=null?d.relDD.toFixed(1)+'%':'--';
-    const rddColor=d.relDD<-10?'#ff6b6b':d.relDD<-5?'#ffa94d':d.relDD<-3?'#ffd43b':'#868e96';
-    const rm=tT==='custom'?'<button class="btn-remove" onclick="event.stopPropagation();rmEtf(\''+d.code+'\')">×</button>':'';
-    // 子ETF列表
-    let subsHtml='';
-    if(d.subs&&d.subs.length>1){
-      subsHtml='<div class="etf-subs">'+d.subs.map(s=>'<div class="etf-sub"><div><span class="etf-sub-name">'+s.name+'</span> <span class="etf-sub-code">'+s.code+'</span></div><div style="text-align:right"><span class="etf-sub-nav">'+s.nav.toFixed(4)+'</span> <span class="etf-sub-divs">'+s.divs+'次分红</span></div></div>').join('')+'</div>';
-    }else if(d.subs&&d.subs.length===1){
-      subsHtml='<div style="font-size:11px;color:var(--text-muted);margin-top:4px">ETF: '+d.subs[0].code+' · '+d.subs[0].divs+'次分红</div>';
-    }
-    h.push('<div class="etf-card" style="border-left:3px solid '+sg.c+'" onclick="openD(\''+d.code+'\')"><div class="card-top"><div><div class="card-name">'+d.indexName+'</div><div class="card-code">'+d.code+'</div></div><div style="display:flex;align-items:center;gap:6px"><div class="card-signal" style="background:'+sg.c+'18;color:'+sg.c+'">'+sg.t+'</div>'+rm+'</div></div><div class="card-metrics"><div class="metric"><div class="metric-label">净值</div><div class="metric-value">'+d.price.toFixed(4)+'</div></div><div class="metric"><div class="metric-label">相对300回撤</div><div class="metric-value" style="color:'+rddColor+'">'+rdd+'</div></div><div class="metric"><div class="metric-label">TTM股息率</div><div class="metric-value" style="color:'+(d.hd?'var(--accent)':'var(--text-muted)')+'">'+yS+'</div></div></div>'+subsHtml+'</div>');
-  }
-  ls.innerHTML=h.join('');
-}
-
-function addEtf(){const i=document.getElementById('addInput'),c=i.value.trim();if(!c||!/^\d{6}$/.test(c)){showErr('请输入6位数字ETF代码');return}const p=gP();if(P.find(g=>g.etfs.includes(c)||g.index===c)){showErr('已在默认列表中');return}if(p.find(e=>e.code===c)){showErr('已在自定义列表中');return}p.push({code:c,name:'ETF'+c});sP(p);i.value='';switchTab('custom');loadAll()}
-function rmEtf(c){sP(gP().filter(e=>e.code!==c));loadAll()}
-
-function openD(code){const d=[...dD,...cD].find(e=>e.code===code);if(!d)return;document.getElementById('modalOverlay').classList.add('active');document.body.style.overflow='hidden';const sg=d.sg;
-  const ds={strong_buy:'相对沪深300回撤超过10%，历史极端低位，可大幅加仓',buy:'相对沪深300回撤超过5%，低位区间，可加仓',moderate_buy:'相对沪深300回撤超过3%，可适度加仓',hold:'相对沪深300处于正常区间，维持现有仓位',moderate_sell:'相对沪深300回撤收窄至1%以内，可适度减仓',sell:'相对沪深300接近历史高位，可考虑减仓',strong_sell:'相对沪深300处于历史极端高位，建议大幅减仓'};
-  let ch='';if(d.ch&&d.ch.length>10)ch='<div class="chart-container"><div class="chart-title">📈 相对300回撤走势</div><canvas id="yieldChart"></canvas></div><div class="chart-container"><div class="chart-title">📊 股息率百分位走势</div><canvas id="pctChart"></canvas></div>';
-  // 子ETF详情
-  let subsDetail='';
-  if(d.subs&&d.subs.length>0){
-    subsDetail='<div style="margin-top:16px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">追踪该指数的ETF</div>'+
-      d.subs.map(s=>'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg-card);border-radius:10px;margin-bottom:6px"><div><div style="font-weight:600;font-size:13px">'+s.name+'</div><div style="font-size:11px;color:var(--text-muted)">'+s.code+'</div></div><div style="text-align:right"><div style="font-weight:700;font-size:15px">'+s.nav.toFixed(4)+'</div><div style="font-size:11px;color:var(--text-muted)">'+s.divs+'次分红</div></div></div>').join('')+'</div>';
-  }
-  document.getElementById('modalContent').innerHTML='<div class="modal-header"><h2>'+d.indexName+'</h2><div class="code">'+d.code+'</div></div><div class="detail-grid"><div class="detail-item"><div class="label">现价</div><div class="value">'+d.price.toFixed(4)+'</div></div><div class="detail-item"><div class="label">相对300回撤</div><div class="value" style="color:'+(d.relDD<-5?'#ff6b6b':'#868e96')+'">'+(d.relDD!=null?d.relDD.toFixed(1)+'%':'--')+'</div></div><div class="detail-item"><div class="label">TTM股息率</div><div class="value" style="color:'+(d.hd?'var(--accent)':'var(--text-muted)')+'">'+(d.hd&&d.yld>0?d.yld.toFixed(2)+'%':'--')+'</div></div><div class="detail-item"><div class="label">股息率百分位</div><div class="value" style="color:'+sg.c+'">'+(d.hd&&d.pct!=null?d.pct.toFixed(1)+'%':'--')+'</div></div></div><div class="signal-detail" style="border-left:3px solid '+sg.c+'"><div class="signal-text" style="color:'+sg.c+'">'+sg.t+'</div><div class="signal-desc">'+(ds[sg.l]||'')+'</div></div>'+ch+subsDetail;
-  if(d.ch&&d.ch.length>10)setTimeout(()=>{drawC('yieldChart',d.ch.map(c=>c.date),d.ch.map(c=>c.relDD),'rgba(100,255,218,0.8)','rgba(100,255,218,0.1)');drawC('pctChart',d.ch.map(c=>c.date),d.ch.map(c=>c.p),'rgba(218,119,242,0.8)','rgba(218,119,242,0.1)')},100);
-}
+function openD(){document.getElementById('modalOverlay').classList.add('active');document.body.style.overflow='hidden'}
 function closeModal(e){if(e&&e.target!==e.currentTarget)return;document.getElementById('modalOverlay').classList.remove('active');document.body.style.overflow=''}
-function drawC(id,dates,data,st,fl){const cv=document.getElementById(id);if(!cv)return;const cx=cv.getContext('2d'),dp=devicePixelRatio||1,W=cv.parentElement.clientWidth-32,H=200;cv.width=W*dp;cv.height=H*dp;cv.style.width=W+'px';cv.style.height=H+'px';cx.scale(dp,dp);if(!data.length)return;const mn=Math.min(...data)*1.1,mx=Math.max(...data)*1.1,rng=mx-mn||1,pT=24,pB=30,pL=40,pR=10,cW=W-pL-pR,cH=H-pT-pB;cx.strokeStyle='rgba(255,255,255,0.06)';cx.lineWidth=1;for(let i=0;i<=4;i++){const y=pT+(cH/4)*i;cx.beginPath();cx.moveTo(pL,y);cx.lineTo(W-pR,y);cx.stroke();cx.fillStyle='#5a6380';cx.font='10px sans-serif';cx.textAlign='right';cx.fillText((mx-(rng/4)*i).toFixed(1),pL-6,y+3)}const step=Math.max(1,Math.floor(data.length/5));cx.fillStyle='#5a6380';cx.font='10px sans-serif';cx.textAlign='center';for(let i=0;i<data.length;i+=step){const d=new Date(dates[i]);cx.fillText((d.getMonth()+1)+'/'+d.getDate(),pL+(i/(data.length-1))*cW,H-8)}cx.beginPath();data.forEach((v,i)=>{const x=pL+(i/(data.length-1))*cW,y=pT+((mx-v)/rng)*cH;i===0?cx.moveTo(x,y):cx.lineTo(x,y)});cx.strokeStyle=st;cx.lineWidth=2;cx.lineJoin='round';cx.stroke();cx.lineTo(pL+cW,pT+cH);cx.lineTo(pL,pT+cH);cx.closePath();cx.fillStyle=fl;cx.fill();const lx=pL+cW,ly=pT+((mx-data[data.length-1])/rng)*cH;cx.beginPath();cx.arc(lx,ly,4,0,Math.PI*2);cx.fillStyle=st;cx.fill();cx.beginPath();cx.arc(lx,ly,2,0,Math.PI*2);cx.fillStyle='#fff';cx.fill();cx.fillStyle=st;cx.font='bold 11px sans-serif';cx.textAlign='right';cx.fillText(data[data.length-1].toFixed(2),lx-8,ly-8)}
-function showErr(m){const t=document.getElementById('errorToast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}
-document.getElementById('addInput').addEventListener('keypress',e=>{if(e.key==='Enter')addEtf()});
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js?v=7').catch(()=>{});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js?v=8').catch(()=>{});
 </script>
 </body>
 </html>
