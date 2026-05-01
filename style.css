@@ -31,6 +31,19 @@ html,body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','PingFan
 .tab-count{display:inline-block;background:rgba(255,255,255,0.08);color:var(--text-muted);font-size:11px;font-weight:600;padding:1px 7px;border-radius:10px;margin-left:4px;vertical-align:middle}
 .tab.active .tab-count{background:rgba(100,255,218,0.15);color:var(--accent)}
 
+/* Filter + Sort */
+.filter-sort-bar{padding:6px 16px 2px}
+.filter-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.filter-chips::-webkit-scrollbar{display:none}
+.filter-chip{flex-shrink:0;background:var(--bg-card);border:1px solid var(--border);color:var(--text-muted);padding:6px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;transition:all .2s;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;gap:4px}
+.filter-chip:active{transform:scale(0.95)}
+.filter-chip.active{background:rgba(100,255,218,0.12);border-color:rgba(100,255,218,0.3);color:var(--accent);font-weight:700}
+.chip-num{font-size:11px;opacity:.7}
+.sort-group{display:flex;gap:6px;padding:2px 0 4px}
+.btn-sort{background:none;border:1px solid var(--border);color:var(--text-muted);padding:5px 14px;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;transition:all .2s;-webkit-tap-highlight-color:transparent}
+.btn-sort:active{transform:scale(0.95)}
+.btn-sort.active{background:var(--accent-dim);border-color:rgba(100,255,218,0.3);color:var(--accent);font-weight:700}
+
 /* Summary */
 .summary-bar{display:flex;gap:8px;padding:10px 16px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .summary-bar::-webkit-scrollbar{display:none}

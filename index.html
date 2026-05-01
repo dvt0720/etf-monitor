@@ -46,7 +46,15 @@
   </button>
 </div>
 
-<div class="summary-bar" id="summaryBar"></div>
+<!-- 筛选 + 排序 -->
+<div class="filter-sort-bar">
+  <div class="filter-chips" id="filterChips"></div>
+  <div class="sort-group">
+    <button class="btn-sort active" data-sort="percentile" onclick="setSort('percentile')">百分位</button>
+    <button class="btn-sort" data-sort="yield" onclick="setSort('yield')">股息率</button>
+    <button class="btn-sort" data-sort="name" onclick="setSort('name')">名称</button>
+  </div>
+</div>
 
 <div id="etfList" class="etf-list">
   <div class="empty" id="placeholder">
@@ -67,7 +75,7 @@
 <div class="error-toast" id="errorToast"></div>
 
 <script>
-// ====== 默认ETF池：追踪指数名 ======
+// ====== 默认ETF池：追踪指数 ======
 const DEFAULT_POOL = [
   // 大盘指数
   { code: '510050', name: '上证50', market: 1 },
@@ -80,20 +88,34 @@ const DEFAULT_POOL = [
   { code: '515180', name: '中证红利(易方达)', market: 1 },
   { code: '515100', name: '红利低波100', market: 1 },
   { code: '159905', name: '深证红利', market: 0 },
+  { code: '515890', name: '红利质量', market: 1 },
+  { code: '513530', name: '港股通红利', market: 1 },
+  { code: '515300', name: '300红利低波', market: 1 },
 ];
 
 const WINDOW_DAYS = 750;
 let currentTab = 'default';
+let currentSort = 'percentile';
+let activeFilters = new Set(); // empty = show all
+
+// ====== 信号定义 ======
+const SIGNAL_DEFS = [
+  { level: 'strong_buy', label: '强烈加仓', color: '#ff6b6b' },
+  { level: 'buy', label: '加仓', color: '#ffa94d' },
+  { level: 'moderate_buy', label: '适度加仓', color: '#ffd43b' },
+  { level: 'hold', label: '持有', color: '#868e96' },
+  { level: 'moderate_sell', label: '适度减仓', color: '#4dabf7' },
+  { level: 'sell', label: '减仓', color: '#da77f2' },
+  { level: 'strong_sell', label: '强烈减仓', color: '#ff6b6b' },
+  { level: 'no_data', label: '无分红', color: '#bdc3c7' },
+];
 
 // ====== 本地存储 ======
-function getCustomPool() {
-  try { return JSON.parse(localStorage.getItem('etf_custom_pool') || '[]'); } catch(e) { return []; }
-}
+function getCustomPool() { try { return JSON.parse(localStorage.getItem('etf_custom_pool') || '[]'); } catch(e) { return []; } }
 function saveCustomPool(pool) { localStorage.setItem('etf_custom_pool', JSON.stringify(pool)); }
 function getMarket(code) { return code.startsWith('5') || code.startsWith('6') ? 1 : 0; }
 
-// ====== JSONP加载器 ======
-let _jsonCbIdx = 0;
+// ====== JSONP ======
 function loadJsonp(url) {
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
@@ -106,7 +128,7 @@ function loadJsonp(url) {
   });
 }
 
-// ====== 解析pingzhongdata ======
+// ====== 解析 ======
 function parsePingzhong(code) {
   const data = window.Data_netWorthTrend;
   if (!data || !data.length) return null;
@@ -209,42 +231,94 @@ async function loadAll() {
     const r = await loadOne(etf);
     if (r) defaultData.push(r);
   }
-  defaultData.sort((a, b) => {
-    if (a.hasDividends && !b.hasDividends) return -1;
-    if (!a.hasDividends && b.hasDividends) return 1;
-    return (a.percentile ?? 50) - (b.percentile ?? 50);
-  });
 
   customData = [];
   for (const etf of customPool) {
     const r = await loadOne(etf);
     if (r) customData.push(r);
   }
-  customData.sort((a, b) => {
-    if (a.hasDividends && !b.hasDividends) return -1;
-    if (!a.hasDividends && b.hasDividends) return 1;
-    return (a.percentile ?? 50) - (b.percentile ?? 50);
-  });
 
   document.getElementById('updateTime').textContent = `更新: ${new Date().toLocaleString('zh-CN')}`;
   document.getElementById('defaultCount').textContent = defaultData.length;
   document.getElementById('customCount').textContent = customData.length;
 
+  renderFilterChips();
   renderTab();
   btn.classList.remove('spinning');
   btn.disabled = false;
+}
+
+// ====== 筛选 ======
+function renderFilterChips() {
+  const data = currentTab === 'default' ? defaultData : customData;
+  const counts = {};
+  data.forEach(d => { counts[d.signal.level] = (counts[d.signal.level] || 0) + 1; });
+
+  const chips = SIGNAL_DEFS.filter(s => counts[s.level] > 0);
+  const el = document.getElementById('filterChips');
+  el.innerHTML = `<button class="filter-chip ${activeFilters.size === 0 ? 'active' : ''}"
+    onclick="clearFilters()" style="border-color:var(--accent);color:var(--accent)">全部</button>` +
+    chips.map(s =>
+    `<button class="filter-chip ${activeFilters.has(s.level) ? 'active' : ''}"
+      onclick="toggleFilter('${s.level}')"
+      style="--chip-color:${s.color}">${s.label}<span class="chip-num">${counts[s.level]}</span></button>`
+  ).join('');
+}
+
+function toggleFilter(level) {
+  if (activeFilters.has(level)) activeFilters.delete(level);
+  else activeFilters.add(level);
+  renderFilterChips();
+  renderTab();
+}
+
+function clearFilters() {
+  activeFilters.clear();
+  renderFilterChips();
+  renderTab();
+}
+
+// ====== 排序 ======
+function setSort(sort) {
+  currentSort = sort;
+  document.querySelectorAll('.btn-sort').forEach(b => b.classList.toggle('active', b.dataset.sort === sort));
+  renderTab();
+}
+
+function sortData(data) {
+  const sorted = [...data];
+  if (currentSort === 'percentile') {
+    sorted.sort((a, b) => {
+      if (a.hasDividends && !b.hasDividends) return -1;
+      if (!a.hasDividends && b.hasDividends) return 1;
+      return (a.percentile ?? 50) - (b.percentile ?? 50);
+    });
+  } else if (currentSort === 'yield') {
+    sorted.sort((a, b) => {
+      if (a.hasDividends && !b.hasDividends) return -1;
+      if (!a.hasDividends && b.hasDividends) return 1;
+      return (b.ttmYield || 0) - (a.ttmYield || 0);
+    });
+  } else if (currentSort === 'name') {
+    sorted.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+  }
+  return sorted;
 }
 
 // ====== 标签切换 ======
 function switchTab(tab) {
   currentTab = tab;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  activeFilters.clear();
+  renderFilterChips();
   renderTab();
 }
 
 function renderTab() {
-  const data = currentTab === 'default' ? defaultData : customData;
-  renderSummary(data);
+  const raw = currentTab === 'default' ? defaultData : customData;
+  let data = activeFilters.size > 0 ? raw.filter(d => activeFilters.has(d.signal.level)) : raw;
+  data = sortData(data);
+  renderSummary(raw);
   renderList(data);
 }
 
@@ -253,12 +327,9 @@ function addEtf() {
   const input = document.getElementById('addInput');
   const code = input.value.trim();
   if (!code || !/^\d{6}$/.test(code)) { showError('请输入6位数字ETF代码'); return; }
-
   const pool = getCustomPool();
-  const inDefault = DEFAULT_POOL.find(e => e.code === code);
-  if (inDefault) { showError('该ETF已在默认列表中'); return; }
+  if (DEFAULT_POOL.find(e => e.code === code)) { showError('该ETF已在默认列表中'); return; }
   if (pool.find(e => e.code === code)) { showError('该ETF已在自定义列表中'); return; }
-
   pool.push({ code, name: `ETF${code}`, market: getMarket(code) });
   saveCustomPool(pool);
   input.value = '';
@@ -267,43 +338,35 @@ function addEtf() {
 }
 
 function removeEtf(code) {
-  let pool = getCustomPool();
-  pool = pool.filter(e => e.code !== code);
-  saveCustomPool(pool);
+  saveCustomPool(getCustomPool().filter(e => e.code !== code));
   loadAll();
 }
 
 // ====== 渲染 ======
 function renderSummary(data) {
   const bar = document.getElementById('summaryBar');
+  // Use the original tab data (unfiltered) for summary counts
+  const raw = currentTab === 'default' ? defaultData : customData;
   const counts = {};
-  data.forEach(d => { counts[d.signal.level] = (counts[d.signal.level] || 0) + 1; });
+  raw.forEach(d => { counts[d.signal.level] = (counts[d.signal.level] || 0) + 1; });
 
-  const chips = [
-    { label: '强烈加仓', c: counts.strong_buy || 0, color: '#ff6b6b' },
-    { label: '加仓', c: counts.buy || 0, color: '#ffa94d' },
-    { label: '适度加仓', c: counts.moderate_buy || 0, color: '#ffd43b' },
-    { label: '持有', c: counts.hold || 0, color: '#868e96' },
-    { label: '适度减仓', c: counts.moderate_sell || 0, color: '#4dabf7' },
-    { label: '减仓', c: counts.sell || 0, color: '#da77f2' },
-    { label: '强烈减仓', c: counts.strong_sell || 0, color: '#ff6b6b' },
-    { label: '无分红', c: counts.no_data || 0, color: '#bdc3c7' },
-  ];
-
-  bar.innerHTML = chips.filter(x => x.c > 0).map(x =>
-    `<div class="summary-chip" style="border-color:${x.color}20">
-      <span style="color:${x.color}">${x.label}</span>
-      <span class="count" style="color:${x.color}">${x.c}</span>
+  const chips = SIGNAL_DEFS.filter(s => counts[s.level] > 0).map(s =>
+    `<div class="summary-chip" style="border-color:${s.color}20">
+      <span style="color:${s.color}">${s.label}</span>
+      <span class="count" style="color:${s.color}">${counts[s.level]}</span>
     </div>`
-  ).join('');
+  );
+  bar.innerHTML = chips.join('');
 }
 
 function renderList(data) {
   const list = document.getElementById('etfList');
   if (!data.length) {
-    list.innerHTML = currentTab === 'custom'
-      ? '<div class="empty">暂无自定义标的<br><span style="font-size:12px;margin-top:8px;display:block">在上方输入ETF代码添加</span></div>'
-      : '<div class="empty">暂无数据</div>';
+    list.innerHTML = activeFilters.size > 0
+      ? '<div class="empty">当前筛选条件下无匹配标的</div>'
+      : currentTab === 'custom'
+        ? '<div class="empty">暂无自定义标的<br><span style="font-size:12px;margin-top:8px;display:block">在上方输入ETF代码添加</span></div>'
+        : '<div class="empty">暂无数据</div>';
     return;
   }
 
@@ -313,8 +376,7 @@ function renderList(data) {
     const yieldStr = d.hasDividends && d.ttmYield > 0 ? `${d.ttmYield.toFixed(2)}%` : '--';
     const pctStr = d.hasDividends && d.percentile != null ? `${pct.toFixed(1)}%` : '--';
     const removeBtn = currentTab === 'custom'
-      ? `<button class="btn-remove" onclick="event.stopPropagation();removeEtf('${d.code}')" title="删除">×</button>`
-      : '';
+      ? `<button class="btn-remove" onclick="event.stopPropagation();removeEtf('${d.code}')" title="删除">×</button>` : '';
 
     return `
     <div class="etf-card" onclick="openDetail('${d.code}')">
@@ -356,7 +418,6 @@ function renderList(data) {
 function openDetail(code) {
   const d = [...defaultData, ...customData].find(e => e.code === code);
   if (!d) return;
-
   const overlay = document.getElementById('modalOverlay');
   const content = document.getElementById('modalContent');
   overlay.classList.add('active');
@@ -415,16 +476,12 @@ function drawChart(id, dates, data, strokeColor, fillColor) {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
-  const W = canvas.parentElement.clientWidth - 32;
-  const H = 200;
+  const W = canvas.parentElement.clientWidth - 32, H = 200;
   canvas.width = W * dpr; canvas.height = H * dpr;
   canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   ctx.scale(dpr, dpr);
-
   if (!data.length) return;
-  const min = Math.min(...data) * 0.9;
-  const max = Math.max(...data) * 1.1;
-  const range = max - min || 1;
+  const min = Math.min(...data) * 0.9, max = Math.max(...data) * 1.1, range = max - min || 1;
   const padTop = 24, padBot = 30, padLeft = 40, padRight = 10;
   const chartW = W - padLeft - padRight, chartH = H - padTop - padBot;
 
@@ -435,28 +492,20 @@ function drawChart(id, dates, data, strokeColor, fillColor) {
     ctx.fillStyle = '#5a6380'; ctx.font = '10px -apple-system,sans-serif'; ctx.textAlign = 'right';
     ctx.fillText((max - (range / 4) * i).toFixed(1), padLeft - 6, y + 3);
   }
-
   const step = Math.max(1, Math.floor(data.length / 5));
   ctx.fillStyle = '#5a6380'; ctx.font = '10px -apple-system,sans-serif'; ctx.textAlign = 'center';
   for (let i = 0; i < data.length; i += step) {
-    const x = padLeft + (i / (data.length - 1)) * chartW;
-    ctx.fillText(`${dates[i].getMonth()+1}/${dates[i].getDate()}`, x, H - 8);
+    ctx.fillText(`${dates[i].getMonth()+1}/${dates[i].getDate()}`, padLeft + (i / (data.length - 1)) * chartW, H - 8);
   }
-
   ctx.beginPath();
   data.forEach((v, i) => {
-    const x = padLeft + (i / (data.length - 1)) * chartW;
-    const y = padTop + ((max - v) / range) * chartH;
+    const x = padLeft + (i / (data.length - 1)) * chartW, y = padTop + ((max - v) / range) * chartH;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.strokeStyle = strokeColor; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
-
-  ctx.lineTo(padLeft + chartW, padTop + chartH);
-  ctx.lineTo(padLeft, padTop + chartH);
+  ctx.lineTo(padLeft + chartW, padTop + chartH); ctx.lineTo(padLeft, padTop + chartH);
   ctx.closePath(); ctx.fillStyle = fillColor; ctx.fill();
-
-  const lastX = padLeft + chartW;
-  const lastY = padTop + ((max - data[data.length - 1]) / range) * chartH;
+  const lastX = padLeft + chartW, lastY = padTop + ((max - data[data.length - 1]) / range) * chartH;
   ctx.beginPath(); ctx.arc(lastX, lastY, 4, 0, Math.PI * 2); ctx.fillStyle = strokeColor; ctx.fill();
   ctx.beginPath(); ctx.arc(lastX, lastY, 2, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
   ctx.fillStyle = strokeColor; ctx.font = 'bold 11px -apple-system,sans-serif'; ctx.textAlign = 'right';
