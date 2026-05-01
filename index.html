@@ -91,8 +91,9 @@ function loadOne(item){
         const sg=!hd?{l:'no_data',t:'无分红数据',c:'#bdc3c7'}:pct<=10?{l:'strong_buy',t:'强烈加仓',c:'#ff6b6b'}:pct<=25?{l:'buy',t:'加仓',c:'#ffa94d'}:pct<=40?{l:'moderate_buy',t:'适度加仓',c:'#ffd43b'}:pct<=60?{l:'hold',t:'持有',c:'#868e96'}:pct<=75?{l:'moderate_sell',t:'适度减仓',c:'#4dabf7'}:pct<=90?{l:'sell',t:'减仓',c:'#da77f2'}:{l:'strong_sell',t:'强烈减仓',c:'#ff6b6b'};
         const ct=new Date(Date.now()-365*864e5);
         const ch=hd?en.filter(e=>e.date>=ct).map(e=>({date:e.date,y:e.y*100,p:pc[en.indexOf(e)]})):[];
+        const isIdx=!!item.index;
         resolve({
-          code:item.index||etfCode, name:nm||item.name, etf:etfCode,
+          code:item.index||etfCode, name:isIdx?item.name:(nm||item.name), etf:etfCode,
           price:lt.nav, yld:lt.y*100, pct, hd, sg, ch, dc:dv.length
         });
       }catch(e){resolve(null)}};
