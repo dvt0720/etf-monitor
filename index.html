@@ -14,36 +14,25 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
 <div class="header">
   <h1>📊 ETF 股息率监控</h1>
   <div class="subtitle">TTM股息率百分位 · 低估加仓 · 高估减仓</div>
   <div class="refresh-row">
     <span class="update-time" id="updateTime">点击刷新加载数据</span>
-    <button class="btn-refresh" id="btnRefresh" onclick="loadAll()">
-      <span class="icon">↻</span> 刷新
-    </button>
+    <button class="btn-refresh" id="btnRefresh" onclick="loadAll()"><span class="icon">↻</span> 刷新</button>
   </div>
 </div>
-
 <div class="add-section">
   <div class="add-title">添加自定义ETF</div>
   <div class="add-row">
-    <input type="text" id="addInput" placeholder="输入6位ETF代码，如 159941" maxlength="6"
-      inputmode="numeric" pattern="[0-9]*">
+    <input type="text" id="addInput" placeholder="输入6位ETF代码，如 159941" maxlength="6" inputmode="numeric" pattern="[0-9]*">
     <button class="btn-add" onclick="addEtf()">+ 添加</button>
   </div>
 </div>
-
 <div class="tab-bar">
-  <button class="tab active" data-tab="default" onclick="switchTab('default')">
-    默认标的 <span class="tab-count" id="defaultCount">0</span>
-  </button>
-  <button class="tab" data-tab="custom" onclick="switchTab('custom')">
-    自定义标的 <span class="tab-count" id="customCount">0</span>
-  </button>
+  <button class="tab active" data-tab="default" onclick="switchTab('default')">默认标的 <span class="tab-count" id="defaultCount">0</span></button>
+  <button class="tab" data-tab="custom" onclick="switchTab('custom')">自定义标的 <span class="tab-count" id="customCount">0</span></button>
 </div>
-
 <div class="filter-sort-bar">
   <div class="filter-chips" id="filterChips"></div>
   <div class="sort-group">
@@ -52,81 +41,82 @@
     <button class="btn-sort" data-sort="name" onclick="setSort('name')">名称</button>
   </div>
 </div>
-
 <div id="etfList" class="etf-list">
-  <div class="empty" id="placeholder">
-    <div style="font-size:48px;margin-bottom:12px">📈</div>
-    <div>点击「刷新」加载ETF数据</div>
-    <div style="font-size:11px;margin-top:6px;color:var(--text-muted)">首次加载约需15秒</div>
-  </div>
+  <div class="empty"><div style="font-size:48px;margin-bottom:12px">📈</div><div>点击「刷新」加载ETF数据</div><div style="font-size:11px;margin-top:6px;color:var(--text-muted)">首次加载约需15秒</div></div>
 </div>
-
 <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
-  <div class="modal" id="modal" onclick="event.stopPropagation()">
-    <div class="modal-handle"></div>
-    <button class="modal-close" onclick="closeModal()">&times;</button>
-    <div id="modalContent"></div>
-  </div>
+  <div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div><button class="modal-close" onclick="closeModal()">&times;</button><div id="modalContent"></div></div>
 </div>
-
 <div class="error-toast" id="errorToast"></div>
+<div id="sandbox" style="display:none"></div>
 
 <script>
+// ====== Config ======
 const DEFAULT_POOL = [
-  { code: '510050', name: '上证50', market: 1 },
-  { code: '510300', name: '沪深300', market: 1 },
-  { code: '510180', name: '上证180', market: 1 },
-  { code: '510500', name: '中证500', market: 1 },
-  { code: '510880', name: '上证红利', market: 1 },
-  { code: '515080', name: '中证红利', market: 1 },
-  { code: '515180', name: '中证红利(易方达)', market: 1 },
-  { code: '515100', name: '红利低波100', market: 1 },
-  { code: '159905', name: '深证红利', market: 0 },
-  { code: '515890', name: '红利质量', market: 1 },
-  { code: '513530', name: '港股通红利', market: 1 },
-  { code: '515300', name: '300红利低波', market: 1 },
+  { code: '510050', name: '上证50' },
+  { code: '510300', name: '沪深300' },
+  { code: '510180', name: '上证180' },
+  { code: '510500', name: '中证500' },
+  { code: '510880', name: '上证红利' },
+  { code: '515080', name: '中证红利' },
+  { code: '515180', name: '中证红利(易方达)' },
+  { code: '515100', name: '红利低波100' },
+  { code: '159905', name: '深证红利' },
+  { code: '515890', name: '红利质量' },
+  { code: '513530', name: '港股通红利' },
+  { code: '515300', name: '300红利低波' },
 ];
-
 const WINDOW_DAYS = 750;
-let currentTab = 'default', currentSort = 'percentile';
-let activeFilters = new Set();
-
+let currentTab = 'default', currentSort = 'percentile', activeFilters = new Set();
 const SIGNAL_DEFS = [
-  { level: 'strong_buy', label: '强烈加仓', color: '#ff6b6b' },
-  { level: 'buy', label: '加仓', color: '#ffa94d' },
-  { level: 'moderate_buy', label: '适度加仓', color: '#ffd43b' },
-  { level: 'hold', label: '持有', color: '#868e96' },
-  { level: 'moderate_sell', label: '适度减仓', color: '#4dabf7' },
-  { level: 'sell', label: '减仓', color: '#da77f2' },
-  { level: 'strong_sell', label: '强烈减仓', color: '#ff6b6b' },
-  { level: 'no_data', label: '无分红', color: '#bdc3c7' },
+  { level:'strong_buy',label:'强烈加仓',color:'#ff6b6b'},{level:'buy',label:'加仓',color:'#ffa94d'},
+  { level:'moderate_buy',label:'适度加仓',color:'#ffd43b'},{level:'hold',label:'持有',color:'#868e96'},
+  { level:'moderate_sell',label:'适度减仓',color:'#4dabf7'},{level:'sell',label:'减仓',color:'#da77f2'},
+  { level:'strong_sell',label:'强烈减仓',color:'#ff6b6b'},{level:'no_data',label:'无分红',color:'#bdc3c7'},
 ];
 
-function getCustomPool() { try { return JSON.parse(localStorage.getItem('etf_custom_pool') || '[]'); } catch(e) { return []; } }
-function saveCustomPool(p) { localStorage.setItem('etf_custom_pool', JSON.stringify(p)); }
-function getMarket(c) { return c.startsWith('5') || c.startsWith('6') ? 1 : 0; }
+function getCustomPool(){try{return JSON.parse(localStorage.getItem('etf_custom_pool')||'[]')}catch(e){return[]}}
+function saveCustomPool(p){localStorage.setItem('etf_custom_pool',JSON.stringify(p))}
+function getMarket(c){return c.startsWith('5')||c.startsWith('6')?1:0}
 
-// ====== 加载基金数据（带超时保护） ======
-function loadScript(url, timeout = 10000) {
+// ====== 通过隐藏iframe加载基金数据 ======
+function loadViaIframe(code, timeout = 15000) {
   return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none';
+    document.body.appendChild(iframe);
+
     let done = false;
     const timer = setTimeout(() => {
-      if (!done) { done = true; s.remove(); reject(new Error('超时')); }
+      if (!done) { done = true; iframe.remove(); reject(new Error('超时')); }
     }, timeout);
-    s.onload = () => { if (!done) { done = true; clearTimeout(timer); resolve(); } };
-    s.onerror = () => { if (!done) { done = true; clearTimeout(timer); s.remove(); reject(new Error('加载失败')); } };
-    s.src = url;
-    document.head.appendChild(s);
+
+    iframe.onload = () => {
+      try {
+        const win = iframe.contentWindow;
+        const navData = win.Data_netWorthTrend;
+        const fundName = win.fS_name;
+        clearTimeout(timer);
+        done = true;
+        iframe.remove();
+        resolve({ navData, fundName });
+      } catch (e) {
+        clearTimeout(timer);
+        done = true;
+        iframe.remove();
+        reject(e);
+      }
+    };
+
+    iframe.onerror = () => {
+      if (!done) { done = true; clearTimeout(timer); iframe.remove(); reject(new Error('加载失败')); }
+    };
+
+    iframe.src = `https://fund.eastmoney.com/pingzhongdata/${code}.js`;
   });
 }
 
-async function fetchEtData(code) {
-  await loadScript(`https://fund.eastmoney.com/pingzhongdata/${code}.js`, 12000);
-  // pingzhongdata脚本通过 var 声明设置全局变量
-  return { navData: window.Data_netWorthTrend, fundName: window.fS_name };
-}
-
+// ====== 数据解析 ======
 function parseNavData(navData) {
   if (!navData || !navData.length) return null;
   const prices = [], dividends = [];
@@ -142,277 +132,214 @@ function parseNavData(navData) {
 
 function calcTTMYield(prices, dividends) {
   return prices.map(p => {
-    const cut = new Date(p.date.getTime() - 365 * 864e5);
-    const ttmDiv = dividends.filter(d => d.date > cut && d.date <= p.date).reduce((s, d) => s + d.amount, 0);
-    return { date: p.date, nav: p.nav, ttmYield: p.nav > 0 ? ttmDiv / p.nav : 0 };
+    const cut = new Date(p.date.getTime() - 365*864e5);
+    const ttmDiv = dividends.filter(d => d.date > cut && d.date <= p.date).reduce((s,d) => s+d.amount, 0);
+    return { date: p.date, nav: p.nav, ttmYield: p.nav > 0 ? ttmDiv/p.nav : 0 };
   });
 }
 
-function calcPercentile(values, win = WINDOW_DAYS) {
-  return values.map((v, i) => {
-    const start = Math.max(0, i - win + 1);
-    const w = values.slice(start, i + 1);
-    return w.length < 2 ? 50 : (w.filter(x => x < v).length / w.length) * 100;
+function calcPercentile(values, win=WINDOW_DAYS) {
+  return values.map((v,i) => {
+    const start = Math.max(0, i-win+1);
+    const w = values.slice(start, i+1);
+    return w.length < 2 ? 50 : (w.filter(x=>x<v).length/w.length)*100;
   });
 }
 
 function getSignal(pct, hasDiv) {
-  if (!hasDiv) return { level: 'no_data', text: '无分红数据', color: '#bdc3c7' };
-  if (pct <= 10) return { level: 'strong_buy', text: '强烈加仓', color: '#ff6b6b' };
-  if (pct <= 25) return { level: 'buy', text: '加仓', color: '#ffa94d' };
-  if (pct <= 40) return { level: 'moderate_buy', text: '适度加仓', color: '#ffd43b' };
-  if (pct <= 60) return { level: 'hold', text: '持有', color: '#868e96' };
-  if (pct <= 75) return { level: 'moderate_sell', text: '适度减仓', color: '#4dabf7' };
-  if (pct <= 90) return { level: 'sell', text: '减仓', color: '#da77f2' };
-  return { level: 'strong_sell', text: '强烈减仓', color: '#ff6b6b' };
+  if (!hasDiv) return {level:'no_data',text:'无分红数据',color:'#bdc3c7'};
+  if (pct<=10) return {level:'strong_buy',text:'强烈加仓',color:'#ff6b6b'};
+  if (pct<=25) return {level:'buy',text:'加仓',color:'#ffa94d'};
+  if (pct<=40) return {level:'moderate_buy',text:'适度加仓',color:'#ffd43b'};
+  if (pct<=60) return {level:'hold',text:'持有',color:'#868e96'};
+  if (pct<=75) return {level:'moderate_sell',text:'适度减仓',color:'#4dabf7'};
+  if (pct<=90) return {level:'sell',text:'减仓',color:'#da77f2'};
+  return {level:'strong_sell',text:'强烈减仓',color:'#ff6b6b'};
 }
 
+// ====== 加载单只 ======
 async function loadOne(etf) {
   try {
-    const { navData, fundName } = await fetchEtData(etf.code);
+    const { navData, fundName } = await loadViaIframe(etf.code);
     const parsed = parseNavData(navData);
     if (!parsed || !parsed.prices.length) return null;
 
     const enriched = calcTTMYield(parsed.prices, parsed.dividends);
     const hasDiv = parsed.dividends.length > 0;
-    const yields = enriched.map(e => e.ttmYield);
-    const pcts = hasDiv ? calcPercentile(yields) : [];
-    const latest = enriched[enriched.length - 1];
-    const latestPct = hasDiv ? pcts[pcts.length - 1] : null;
-    const signal = getSignal(latestPct, hasDiv);
+    const pcts = hasDiv ? calcPercentile(enriched.map(e=>e.ttmYield)) : [];
+    const latest = enriched[enriched.length-1];
+    const pct = hasDiv ? pcts[pcts.length-1] : null;
+    const signal = getSignal(pct, hasDiv);
 
-    const cut = new Date(Date.now() - 365 * 864e5);
-    const chartData = hasDiv ? enriched.filter(e => e.date >= cut).map(e => ({
-      date: e.date, yield: e.ttmYield * 100, percentile: pcts[enriched.indexOf(e)],
+    const cut = new Date(Date.now()-365*864e5);
+    const chartData = hasDiv ? enriched.filter(e=>e.date>=cut).map(e=>({
+      date:e.date, yield:e.ttmYield*100, percentile:pcts[enriched.indexOf(e)]
     })) : [];
 
     return {
-      code: etf.code, name: fundName || etf.name,
-      price: latest.nav, ttmYield: latest.ttmYield * 100,
-      percentile: latestPct, signal, chartData,
-      dividendCount: parsed.dividends.length, hasDividends: hasDiv,
+      code:etf.code, name:fundName||etf.name, price:latest.nav,
+      ttmYield:latest.ttmYield*100, percentile:pct, signal, chartData,
+      dividendCount:parsed.dividends.length, hasDividends:hasDiv,
     };
-  } catch (e) {
-    console.warn(`${etf.code} 失败:`, e.message);
-    return null;
-  }
+  } catch(e) { console.warn(`${etf.code} 失败:`,e.message); return null; }
 }
 
 // ====== 主加载 ======
-let defaultData = [], customData = [];
+let defaultData=[], customData=[];
 
 async function loadAll() {
   const btn = document.getElementById('btnRefresh');
   const list = document.getElementById('etfList');
   const pool = getCustomPool();
   const total = DEFAULT_POOL.length + pool.length;
+  let loaded = 0;
 
-  btn.classList.add('spinning');
-  btn.disabled = true;
+  btn.classList.add('spinning'); btn.disabled = true;
   list.innerHTML = `<div class="loading"><div class="spinner"></div><div class="text">正在加载 ${total} 只ETF数据...</div></div>`;
 
-  // 先加载默认列表
   defaultData = [];
   for (const etf of DEFAULT_POOL) {
     const r = await loadOne(etf);
     if (r) defaultData.push(r);
-    // 实时更新进度
-    document.querySelector('.loading .text').textContent =
-      `已加载 ${defaultData.length}/${total} 只ETF...`;
+    loaded++;
+    list.querySelector('.text').textContent = `已加载 ${loaded}/${total} 只ETF...`;
   }
-
-  // 再加载自定义
   customData = [];
   for (const etf of pool) {
     const r = await loadOne(etf);
     if (r) customData.push(r);
-    document.querySelector('.loading .text').textContent =
-      `已加载 ${defaultData.length + customData.length}/${total} 只ETF...`;
+    loaded++;
+    list.querySelector('.text').textContent = `已加载 ${loaded}/${total} 只ETF...`;
   }
 
   document.getElementById('updateTime').textContent = `更新: ${new Date().toLocaleString('zh-CN')}`;
   document.getElementById('defaultCount').textContent = defaultData.length;
   document.getElementById('customCount').textContent = customData.length;
-
-  renderFilterChips();
-  renderTab();
-  btn.classList.remove('spinning');
-  btn.disabled = false;
+  renderFilterChips(); renderTab();
+  btn.classList.remove('spinning'); btn.disabled = false;
 }
 
-// ====== 筛选 ======
+// ====== 筛选排序 ======
 function renderFilterChips() {
-  const raw = currentTab === 'default' ? defaultData : customData;
-  const counts = {};
-  raw.forEach(d => { counts[d.signal.level] = (counts[d.signal.level] || 0) + 1; });
-
-  const chips = SIGNAL_DEFS.filter(s => counts[s.level] > 0);
+  const raw = currentTab==='default' ? defaultData : customData;
+  const counts={}; raw.forEach(d=>{counts[d.signal.level]=(counts[d.signal.level]||0)+1});
   document.getElementById('filterChips').innerHTML =
-    `<button class="filter-chip ${activeFilters.size === 0 ? 'active' : ''}" onclick="clearFilters()">全部</button>` +
-    chips.map(s =>
-      `<button class="filter-chip ${activeFilters.has(s.level) ? 'active' : ''}"
-        onclick="toggleFilter('${s.level}')"
-        style="--chip-color:${s.color}">${s.label}<span class="chip-num">${counts[s.level]}</span></button>`
+    `<button class="filter-chip ${activeFilters.size===0?'active':''}" onclick="clearFilters()">全部</button>` +
+    SIGNAL_DEFS.filter(s=>counts[s.level]>0).map(s=>
+      `<button class="filter-chip ${activeFilters.has(s.level)?'active':''}" onclick="toggleFilter('${s.level}')" style="--chip-color:${s.color}">${s.label}<span class="chip-num">${counts[s.level]}</span></button>`
     ).join('');
 }
-
-function toggleFilter(level) {
-  activeFilters.has(level) ? activeFilters.delete(level) : activeFilters.add(level);
-  renderFilterChips(); renderTab();
-}
-function clearFilters() { activeFilters.clear(); renderFilterChips(); renderTab(); }
-
-function setSort(sort) {
-  currentSort = sort;
-  document.querySelectorAll('.btn-sort').forEach(b => b.classList.toggle('active', b.dataset.sort === sort));
-  renderTab();
-}
-
-function sortData(data) {
-  const s = [...data];
-  if (currentSort === 'percentile') s.sort((a, b) => (a.hasDividends ? a.percentile ?? 50 : 999) - (b.hasDividends ? b.percentile ?? 50 : 999));
-  else if (currentSort === 'yield') s.sort((a, b) => (b.hasDividends ? b.ttmYield : -1) - (a.hasDividends ? a.ttmYield : -1));
-  else s.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+function toggleFilter(l){activeFilters.has(l)?activeFilters.delete(l):activeFilters.add(l);renderFilterChips();renderTab()}
+function clearFilters(){activeFilters.clear();renderFilterChips();renderTab()}
+function setSort(s){currentSort=s;document.querySelectorAll('.btn-sort').forEach(b=>b.classList.toggle('active',b.dataset.sort===s));renderTab()}
+function sortData(d){
+  const s=[...d];
+  if(currentSort==='percentile')s.sort((a,b)=>(a.hasDividends?a.percentile??50:999)-(b.hasDividends?b.percentile??50:999));
+  else if(currentSort==='yield')s.sort((a,b)=>(b.hasDividends?b.ttmYield:-1)-(a.hasDividends?a.ttmYield:-1));
+  else s.sort((a,b)=>a.name.localeCompare(b.name,'zh-CN'));
   return s;
 }
-
-function switchTab(tab) {
-  currentTab = tab;
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-  activeFilters.clear(); renderFilterChips(); renderTab();
+function switchTab(t){currentTab=t;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));activeFilters.clear();renderFilterChips();renderTab()}
+function renderTab(){
+  const raw=currentTab==='default'?defaultData:customData;
+  let data=activeFilters.size>0?raw.filter(d=>activeFilters.has(d.signal.level)):raw;
+  renderSummary(raw);renderList(sortData(data));
 }
 
-function renderTab() {
-  const raw = currentTab === 'default' ? defaultData : customData;
-  let data = activeFilters.size > 0 ? raw.filter(d => activeFilters.has(d.signal.level)) : raw;
-  renderSummary(raw); renderList(sortData(data));
+// ====== 添加删除 ======
+function addEtf(){
+  const input=document.getElementById('addInput'),code=input.value.trim();
+  if(!code||!/^\d{6}$/.test(code)){showError('请输入6位数字ETF代码');return}
+  const pool=getCustomPool();
+  if(DEFAULT_POOL.find(e=>e.code===code)){showError('该ETF已在默认列表中');return}
+  if(pool.find(e=>e.code===code)){showError('该ETF已在自定义列表中');return}
+  pool.push({code,name:`ETF${code}`,market:getMarket(code)});
+  saveCustomPool(pool);input.value='';switchTab('custom');loadAll();
+}
+function removeEtf(code){saveCustomPool(getCustomPool().filter(e=>e.code!==code));loadAll()}
+
+// ====== 渲染 ======
+function renderSummary(data){
+  const raw=currentTab==='default'?defaultData:customData;
+  const counts={};raw.forEach(d=>{counts[d.signal.level]=(counts[d.signal.level]||0)+1});
+  document.getElementById('summaryBar').innerHTML=SIGNAL_DEFS.filter(s=>counts[s.level]>0).map(s=>
+    `<div class="summary-chip" style="border-color:${s.color}20"><span style="color:${s.color}">${s.label}</span><span class="count" style="color:${s.color}">${counts[s.level]}</span></div>`
+  ).join('');
 }
 
-function addEtf() {
-  const input = document.getElementById('addInput');
-  const code = input.value.trim();
-  if (!code || !/^\d{6}$/.test(code)) { showError('请输入6位数字ETF代码'); return; }
-  const pool = getCustomPool();
-  if (DEFAULT_POOL.find(e => e.code === code)) { showError('该ETF已在默认列表中'); return; }
-  if (pool.find(e => e.code === code)) { showError('该ETF已在自定义列表中'); return; }
-  pool.push({ code, name: `ETF${code}`, market: getMarket(code) });
-  saveCustomPool(pool); input.value = '';
-  switchTab('custom'); loadAll();
-}
-
-function removeEtf(code) {
-  saveCustomPool(getCustomPool().filter(e => e.code !== code));
-  loadAll();
-}
-
-function renderSummary(data) {
-  const raw = currentTab === 'default' ? defaultData : customData;
-  const counts = {};
-  raw.forEach(d => { counts[d.signal.level] = (counts[d.signal.level] || 0) + 1; });
-  document.getElementById('summaryBar').innerHTML = SIGNAL_DEFS
-    .filter(s => counts[s.level] > 0)
-    .map(s => `<div class="summary-chip" style="border-color:${s.color}20">
-      <span style="color:${s.color}">${s.label}</span>
-      <span class="count" style="color:${s.color}">${counts[s.level]}</span></div>`).join('');
-}
-
-function renderList(data) {
-  const list = document.getElementById('etfList');
-  if (!data.length) {
-    list.innerHTML = activeFilters.size > 0 ? '<div class="empty">当前筛选条件下无匹配标的</div>'
-      : currentTab === 'custom' ? '<div class="empty">暂无自定义标的<br><span style="font-size:12px;margin-top:8px;display:block">在上方输入ETF代码添加</span></div>'
-      : '<div class="empty">暂无数据</div>';
-    return;
+function renderList(data){
+  const list=document.getElementById('etfList');
+  if(!data.length){
+    list.innerHTML=activeFilters.size>0?'<div class="empty">当前筛选条件下无匹配标的</div>'
+      :currentTab==='custom'?'<div class="empty">暂无自定义标的<br><span style="font-size:12px;margin-top:8px;display:block">在上方输入ETF代码添加</span></div>'
+      :'<div class="empty">暂无数据</div>';return;
   }
-  list.innerHTML = data.map(d => {
-    const s = d.signal, pct = d.percentile ?? 50;
-    const yStr = d.hasDividends && d.ttmYield > 0 ? `${d.ttmYield.toFixed(2)}%` : '--';
-    const pStr = d.hasDividends && d.percentile != null ? `${pct.toFixed(1)}%` : '--';
-    const rm = currentTab === 'custom'
-      ? `<button class="btn-remove" onclick="event.stopPropagation();removeEtf('${d.code}')" title="删除">×</button>` : '';
-    return `
-    <div class="etf-card" onclick="openDetail('${d.code}')">
+  list.innerHTML=data.map(d=>{
+    const s=d.signal,pct=d.percentile??50;
+    const yStr=d.hasDividends&&d.ttmYield>0?`${d.ttmYield.toFixed(2)}%`:'--';
+    const pStr=d.hasDividends&&d.percentile!=null?`${pct.toFixed(1)}%`:'--';
+    const rm=currentTab==='custom'?`<button class="btn-remove" onclick="event.stopPropagation();removeEtf('${d.code}')" title="删除">×</button>`:'';
+    return `<div class="etf-card" onclick="openDetail('${d.code}')">
       <style>.etf-card[onclick*="'${d.code}'"]::before{background:${s.color}}</style>
-      <div class="card-top">
-        <div><div class="card-name">${d.name}</div><div class="card-code">${d.code}</div></div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <div class="card-signal" style="background:${s.color}18;color:${s.color}">${s.text}</div>${rm}
-        </div>
-      </div>
+      <div class="card-top"><div><div class="card-name">${d.name}</div><div class="card-code">${d.code}</div></div>
+      <div style="display:flex;align-items:center;gap:6px"><div class="card-signal" style="background:${s.color}18;color:${s.color}">${s.text}</div>${rm}</div></div>
       <div class="card-metrics">
         <div class="metric"><div class="metric-label">净值</div><div class="metric-value">${d.price.toFixed(4)}</div></div>
-        <div class="metric"><div class="metric-label">TTM股息率</div><div class="metric-value" style="color:${d.hasDividends ? 'var(--accent)' : 'var(--text-muted)'}">${yStr}</div></div>
+        <div class="metric"><div class="metric-label">TTM股息率</div><div class="metric-value" style="color:${d.hasDividends?'var(--accent)':'var(--text-muted)'}">${yStr}</div></div>
         <div class="metric"><div class="metric-label">百分位</div><div class="metric-value" style="color:${s.color}">${pStr}</div></div>
       </div>
-      ${d.hasDividends ? `<div class="pct-bar-wrap"><div class="pct-bar-bg"><div class="pct-bar-fill" style="width:${pct}%;background:${s.color}"></div></div><div class="pct-bar-label"><span>0% 低估</span><span>50%</span><span>100% 高估</span></div></div>`
-        : '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">该ETF无现金分红记录</div>'}
+      ${d.hasDividends?`<div class="pct-bar-wrap"><div class="pct-bar-bg"><div class="pct-bar-fill" style="width:${pct}%;background:${s.color}"></div></div><div class="pct-bar-label"><span>0% 低估</span><span>50%</span><span>100% 高估</span></div></div>`:'<div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">该ETF无现金分红记录</div>'}
     </div>`;
   }).join('');
 }
 
-function openDetail(code) {
-  const d = [...defaultData, ...customData].find(e => e.code === code);
-  if (!d) return;
-  const overlay = document.getElementById('modalOverlay'), content = document.getElementById('modalContent');
-  overlay.classList.add('active'); document.body.style.overflow = 'hidden';
-  const s = d.signal;
-  let chartHTML = '';
-  if (d.hasDividends && d.chartData && d.chartData.length > 10) {
-    chartHTML = `<div class="chart-container"><div class="chart-title">📈 股息率走势（近1年）</div><canvas id="yieldChart"></canvas></div>
-      <div class="chart-container"><div class="chart-title">📊 百分位走势（近1年）</div><canvas id="pctChart"></canvas></div>`;
+// ====== 详情 ======
+function openDetail(code){
+  const d=[...defaultData,...customData].find(e=>e.code===code);if(!d)return;
+  document.getElementById('modalOverlay').classList.add('active');document.body.style.overflow='hidden';
+  const s=d.signal;let ch='';
+  if(d.hasDividends&&d.chartData&&d.chartData.length>10){
+    ch=`<div class="chart-container"><div class="chart-title">📈 股息率走势（近1年）</div><canvas id="yieldChart"></canvas></div>
+    <div class="chart-container"><div class="chart-title">📊 百分位走势（近1年）</div><canvas id="pctChart"></canvas></div>`;
   }
-  const desc = {
-    strong_buy:'当前股息率处于历史极低位（前10%），可考虑大幅加仓',buy:'当前股息率处于历史低位（前25%），可考虑加仓',
-    moderate_buy:'当前股息率低于中位数（前40%），可适度加仓',hold:'当前股息率处于中位区间（40-60%），维持现有仓位',
-    moderate_sell:'当前股息率偏高（后40%），可适度减仓',sell:'当前股息率处于历史高位（后25%），可考虑减仓',
-    strong_sell:'当前股息率处于历史极高位（后10%），建议大幅减仓',no_data:'该ETF暂无现金分红记录',
-  };
-  content.innerHTML = `
+  const desc={strong_buy:'当前股息率处于历史极低位（前10%），可考虑大幅加仓',buy:'当前股息率处于历史低位（前25%），可考虑加仓',moderate_buy:'当前股息率低于中位数（前40%），可适度加仓',hold:'当前股息率处于中位区间（40-60%），维持现有仓位',moderate_sell:'当前股息率偏高（后40%），可适度减仓',sell:'当前股息率处于历史高位（后25%），可考虑减仓',strong_sell:'当前股息率处于历史极高位（后10%），建议大幅减仓',no_data:'该ETF暂无现金分红记录'};
+  document.getElementById('modalContent').innerHTML=`
     <div class="modal-header"><h2>${d.name}</h2><div class="code">${d.code}</div></div>
     <div class="detail-grid">
       <div class="detail-item"><div class="label">现价</div><div class="value">${d.price.toFixed(4)}</div></div>
-      <div class="detail-item"><div class="label">TTM股息率</div><div class="value" style="color:${d.hasDividends ? 'var(--accent)' : 'var(--text-muted)'}">${d.hasDividends && d.ttmYield > 0 ? d.ttmYield.toFixed(2)+'%' : '--'}</div></div>
-      <div class="detail-item"><div class="label">百分位</div><div class="value" style="color:${s.color}">${d.hasDividends && d.percentile != null ? d.percentile.toFixed(1)+'%' : '--'}</div></div>
-      <div class="detail-item"><div class="label">历史分红次数</div><div class="value">${d.dividendCount}</div></div>
+      <div class="detail-item"><div class="label">TTM股息率</div><div class="value" style="color:${d.hasDividends?'var(--accent)':'var(--text-muted)'}">${d.hasDividends&&d.ttmYield>0?d.ttmYield.toFixed(2)+'%':'--'}</div></div>
+      <div class="detail-item"><div class="label">百分位</div><div class="value" style="color:${s.color}">${d.hasDividends&&d.percentile!=null?d.percentile.toFixed(1)+'%':'--'}</div></div>
+      <div class="detail-item"><div class="label">历史分红</div><div class="value">${d.dividendCount}次</div></div>
     </div>
-    <div class="signal-detail" style="border-left:3px solid ${s.color}"><div class="signal-text" style="color:${s.color}">${s.text}</div><div class="signal-desc">${desc[s.level]||''}</div></div>
-    ${chartHTML}`;
-  if (d.hasDividends && d.chartData && d.chartData.length > 10) {
-    setTimeout(() => {
-      drawChart('yieldChart', d.chartData.map(c => c.date), d.chartData.map(c => c.yield), 'rgba(100,255,218,0.8)', 'rgba(100,255,218,0.1)');
-      drawChart('pctChart', d.chartData.map(c => c.date), d.chartData.map(c => c.percentile), 'rgba(218,119,242,0.8)', 'rgba(218,119,242,0.1)');
-    }, 100);
+    <div class="signal-detail" style="border-left:3px solid ${s.color}"><div class="signal-text" style="color:${s.color}">${s.text}</div><div class="signal-desc">${desc[s.level]||''}</div></div>${ch}`;
+  if(d.hasDividends&&d.chartData&&d.chartData.length>10){
+    setTimeout(()=>{drawChart('yieldChart',d.chartData.map(c=>c.date),d.chartData.map(c=>c.yield),'rgba(100,255,218,0.8)','rgba(100,255,218,0.1)');drawChart('pctChart',d.chartData.map(c=>c.date),d.chartData.map(c=>c.percentile),'rgba(218,119,242,0.8)','rgba(218,119,242,0.1)')},100);
   }
 }
+function closeModal(e){if(e&&e.target!==e.currentTarget)return;document.getElementById('modalOverlay').classList.remove('active');document.body.style.overflow=''}
 
-function closeModal(e) { if (e && e.target !== e.currentTarget) return; document.getElementById('modalOverlay').classList.remove('active'); document.body.style.overflow = ''; }
-
-function drawChart(id, dates, data, stroke, fill) {
-  const canvas = document.getElementById(id); if (!canvas) return;
-  const ctx = canvas.getContext('2d'), dpr = devicePixelRatio || 1;
-  const W = canvas.parentElement.clientWidth - 32, H = 200;
-  canvas.width = W * dpr; canvas.height = H * dpr;
-  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
-  ctx.scale(dpr, dpr); if (!data.length) return;
-  const min = Math.min(...data)*.9, max = Math.max(...data)*1.1, range = max-min||1;
+// ====== Canvas图表 ======
+function drawChart(id,dates,data,stroke,fill){
+  const canvas=document.getElementById(id);if(!canvas)return;
+  const ctx=canvas.getContext('2d'),dpr=devicePixelRatio||1;
+  const W=canvas.parentElement.clientWidth-32,H=200;
+  canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.width=W+'px';canvas.style.height=H+'px';
+  ctx.scale(dpr,dpr);if(!data.length)return;
+  const min=Math.min(...data)*.9,max=Math.max(...data)*1.1,range=max-min||1;
   const pT=24,pB=30,pL=40,pR=10,cW=W-pL-pR,cH=H-pT-pB;
   ctx.strokeStyle='rgba(255,255,255,0.06)';ctx.lineWidth=1;
-  for(let i=0;i<=4;i++){const y=pT+(cH/4)*i;ctx.beginPath();ctx.moveTo(pL,y);ctx.lineTo(W-pR,y);ctx.stroke();ctx.fillStyle='#5a6380';ctx.font='10px -apple-system,sans-serif';ctx.textAlign='right';ctx.fillText((max-(range/4)*i).toFixed(1),pL-6,y+3);}
+  for(let i=0;i<=4;i++){const y=pT+(cH/4)*i;ctx.beginPath();ctx.moveTo(pL,y);ctx.lineTo(W-pR,y);ctx.stroke();ctx.fillStyle='#5a6380';ctx.font='10px -apple-system,sans-serif';ctx.textAlign='right';ctx.fillText((max-(range/4)*i).toFixed(1),pL-6,y+3)}
   const step=Math.max(1,Math.floor(data.length/5));ctx.fillStyle='#5a6380';ctx.font='10px -apple-system,sans-serif';ctx.textAlign='center';
-  for(let i=0;i<data.length;i+=step){ctx.fillText(`${dates[i].getMonth()+1}/${dates[i].getDate()}`,pL+(i/(data.length-1))*cW,H-8);}
-  ctx.beginPath();data.forEach((v,i)=>{const x=pL+(i/(data.length-1))*cW,y=pT+((max-v)/range)*cH;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.lineJoin='round';ctx.stroke();
+  for(let i=0;i<data.length;i+=step)ctx.fillText(`${dates[i].getMonth()+1}/${dates[i].getDate()}`,pL+(i/(data.length-1))*cW,H-8);
+  ctx.beginPath();data.forEach((v,i)=>{const x=pL+(i/(data.length-1))*cW,y=pT+((max-v)/range)*cH;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)});ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.lineJoin='round';ctx.stroke();
   ctx.lineTo(pL+cW,pT+cH);ctx.lineTo(pL,pT+cH);ctx.closePath();ctx.fillStyle=fill;ctx.fill();
   const lx=pL+cW,ly=pT+((max-data[data.length-1])/range)*cH;ctx.beginPath();ctx.arc(lx,ly,4,0,Math.PI*2);ctx.fillStyle=stroke;ctx.fill();ctx.beginPath();ctx.arc(lx,ly,2,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();
   ctx.fillStyle=stroke;ctx.font='bold 11px -apple-system,sans-serif';ctx.textAlign='right';ctx.fillText(data[data.length-1].toFixed(2),lx-8,ly-8);
 }
 
-function showError(m){const t=document.getElementById('errorToast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
-document.getElementById('addInput').addEventListener('keypress',e=>{if(e.key==='Enter')addEtf();});
-if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
-
-// 兼容：pingzhongdata脚本通过 var 赋值到 window
-window.Data_netWorthTrend = undefined;
-window.fS_name = undefined;
+function showError(m){const t=document.getElementById('errorToast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}
+document.getElementById('addInput').addEventListener('keypress',e=>{if(e.key==='Enter')addEtf()});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
 </html>
