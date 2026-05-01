@@ -26,6 +26,13 @@
   </div>
 </div>
 
+<!-- 添加ETF -->
+<div class="add-bar" id="addBar">
+  <input type="text" id="addInput" placeholder="输入ETF代码，如 510300" maxlength="6"
+    inputmode="numeric" pattern="[0-9]*">
+  <button class="btn-add" onclick="addEtf()">+ 添加</button>
+</div>
+
 <div class="summary-bar" id="summaryBar"></div>
 
 <div id="etfList" class="etf-list">
@@ -47,57 +54,60 @@
 <div class="error-toast" id="errorToast"></div>
 
 <script>
-// ====== ETF池配置 ======
-const ETF_POOL = [
+// ====== 默认ETF池（有分红数据的） ======
+const DEFAULT_POOL = [
   { code: '510300', name: '沪深300ETF', market: 1 },
   { code: '510500', name: '中证500ETF', market: 1 },
   { code: '510050', name: '上证50ETF', market: 1 },
-  { code: '159915', name: '创业板ETF', market: 0 },
   { code: '510880', name: '红利ETF', market: 1 },
-  { code: '512890', name: '红利低波ETF', market: 1 },
   { code: '515180', name: '红利ETF基金', market: 1 },
   { code: '515080', name: '中证红利ETF', market: 1 },
+  { code: '510230', name: '金融ETF', market: 1 },
+  { code: '159915', name: '创业板ETF', market: 0 },
+  { code: '512890', name: '红利低波ETF', market: 1 },
   { code: '512800', name: '银行ETF', market: 1 },
   { code: '512200', name: '房地产ETF', market: 1 },
   { code: '512010', name: '医药ETF', market: 1 },
-  { code: '510230', name: '金融ETF', market: 1 },
 ];
 
-const WINDOW_DAYS = 750; // 3年滚动窗口
+const WINDOW_DAYS = 750;
+
+// ====== 本地存储管理 ======
+function getPool() {
+  try {
+    const saved = localStorage.getItem('etf_pool');
+    if (saved) return JSON.parse(saved);
+  } catch(e) {}
+  return DEFAULT_POOL.map(e => ({...e}));
+}
+
+function savePool(pool) {
+  localStorage.setItem('etf_pool', JSON.stringify(pool));
+}
+
+// ====== 自定义ETF名称映射 ======
+const NAME_MAP = {};
+DEFAULT_POOL.forEach(e => NAME_MAP[e.code] = e.name);
+
+function getMarket(code) {
+  return code.startsWith('5') || code.startsWith('6') ? 1 : 0;
+}
 
 // ====== JSONP加载器 ======
 let _jsonCbIdx = 0;
 function loadJsonp(url) {
   return new Promise((resolve, reject) => {
-    const cbName = `_etfcb_${++_jsonCbIdx}`;
     const script = document.createElement('script');
-    const timer = setTimeout(() => {
-      cleanup();
-      reject(new Error('超时'));
-    }, 15000);
-
-    function cleanup() {
-      clearTimeout(timer);
-      delete window[cbName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-    }
-
-    // pingzhongdata 返回的是全局变量赋值，不是JSONP
-    // 我们需要 hook 变量来捕获数据
+    const timer = setTimeout(() => { cleanup(); reject(new Error('超时')); }, 15000);
+    function cleanup() { clearTimeout(timer); if (script.parentNode) script.parentNode.removeChild(script); }
     script.src = url;
-    script.onload = () => {
-      cleanup();
-      resolve();
-    };
-    script.onerror = () => {
-      cleanup();
-      reject(new Error('加载失败'));
-    };
+    script.onload = () => { cleanup(); resolve(); };
+    script.onerror = () => { cleanup(); reject(new Error('加载失败')); };
     document.head.appendChild(script);
   });
 }
 
-// ====== 解析pingzhongdata的Data_netWorthTrend ======
+// ====== 解析pingzhongdata ======
 function parsePingzhong(code) {
   const data = window.Data_netWorthTrend;
   if (!data || !data.length) return null;
@@ -110,7 +120,6 @@ function parsePingzhong(code) {
     prices.push({ date, nav: item.y });
 
     if (item.unitMoney && typeof item.unitMoney === 'string') {
-      // 提取分红金额： "分红：每份派现金0.075元" -> 0.075
       const m = item.unitMoney.match(/([\d.]+)\s*元/);
       if (m) {
         dividends.push({ date, amount: parseFloat(m[1]) });
@@ -121,18 +130,26 @@ function parsePingzhong(code) {
   return { prices, dividends };
 }
 
+// ====== 获取基金名称 ======
+function parseFundName(code) {
+  try {
+    const raw = window.Data_netWorthTrend;
+    // 尝试从全局变量获取名称
+    if (window.fS_name) return window.fS_name;
+  } catch(e) {}
+  return NAME_MAP[code] || `ETF${code}`;
+}
+
 // ====== 计算TTM股息率 ======
 function calcTTMYield(prices, dividends) {
   if (!prices.length) return prices;
-
-  return prices.map((p, i) => {
+  return prices.map((p) => {
     const oneYearAgo = new Date(p.date.getTime() - 365 * 24 * 3600 * 1000);
     const ttmDiv = dividends
       .filter(d => d.date > oneYearAgo && d.date <= p.date)
       .reduce((sum, d) => sum + d.amount, 0);
     return {
-      date: p.date,
-      nav: p.nav,
+      date: p.date, nav: p.nav,
       ttmDividend: ttmDiv,
       ttmYield: p.nav > 0 ? ttmDiv / p.nav : 0,
     };
@@ -150,7 +167,8 @@ function calcPercentile(values, window = WINDOW_DAYS) {
 }
 
 // ====== 信号判断 ======
-function getSignal(pct) {
+function getSignal(pct, hasDividends) {
+  if (!hasDividends) return { level: 'no_data', text: '无分红数据', color: '#bdc3c7' };
   if (pct == null) return { level: 'no_data', text: '无分红数据', color: '#bdc3c7' };
   if (pct <= 10) return { level: 'strong_buy', text: '强烈加仓', color: '#ff6b6b' };
   if (pct <= 25) return { level: 'buy', text: '加仓', color: '#ffa94d' };
@@ -164,39 +182,42 @@ function getSignal(pct) {
 // ====== 加载单只ETF ======
 async function loadOne(etf) {
   try {
-    // 每次加载前清空旧数据
     window.Data_netWorthTrend = null;
+    window.fS_name = null;
     await loadJsonp(`https://fund.eastmoney.com/pingzhongdata/${etf.code}.js`);
 
     const parsed = parsePingzhong(etf.code);
     if (!parsed || !parsed.prices.length) return null;
 
+    const name = parseFundName(etf.code);
     const enriched = calcTTMYield(parsed.prices, parsed.dividends);
     const yields = enriched.map(e => e.ttmYield);
-    const percentiles = calcPercentile(yields);
+    const hasDividends = parsed.dividends.length > 0;
+    const percentiles = hasDividends ? calcPercentile(yields) : [];
     const latest = enriched[enriched.length - 1];
-    const latestPct = percentiles[percentiles.length - 1];
-    const signal = getSignal(latestPct);
+    const latestPct = hasDividends ? percentiles[percentiles.length - 1] : null;
+    const signal = getSignal(latestPct, hasDividends);
 
     // 图表数据（最近1年）
     const oneYearAgo = new Date(Date.now() - 365 * 24 * 3600 * 1000);
-    const chartData = enriched
+    const chartData = hasDividends ? enriched
       .filter(e => e.date >= oneYearAgo)
-      .map((e, i, arr) => ({
+      .map((e) => ({
         date: e.date,
         yield: e.ttmYield * 100,
         percentile: percentiles[enriched.indexOf(e)],
-      }));
+      })) : [];
 
     return {
       code: etf.code,
-      name: etf.name,
+      name,
       price: latest.nav,
       ttmYield: latest.ttmYield * 100,
       percentile: latestPct,
       signal,
       chartData,
       dividendCount: parsed.dividends.length,
+      hasDividends,
     };
   } catch (e) {
     console.warn(`加载 ${etf.code} 失败:`, e.message);
@@ -204,27 +225,30 @@ async function loadOne(etf) {
   }
 }
 
-// ====== 主加载逻辑 ======
+// ====== 主加载 ======
 let allData = [];
 
 async function loadAll() {
   const btn = document.getElementById('btnRefresh');
   const list = document.getElementById('etfList');
+  const pool = getPool();
 
   btn.classList.add('spinning');
   btn.disabled = true;
-  list.innerHTML = '<div class="loading"><div class="spinner"></div><div class="text">正在加载ETF数据（约15秒）...</div></div>';
+  list.innerHTML = `<div class="loading"><div class="spinner"></div><div class="text">正在加载 ${pool.length} 只ETF数据...</div></div>`;
 
   allData = [];
-
-  // 串行加载避免并发冲突（Data_netWorthTrend是全局变量）
-  for (const etf of ETF_POOL) {
+  for (const etf of pool) {
     const result = await loadOne(etf);
     if (result) allData.push(result);
   }
 
-  // 按百分位排序
-  allData.sort((a, b) => (a.percentile ?? 50) - (b.percentile ?? 50));
+  // 排序：有分红数据的按百分位升序，无分红的排最后
+  allData.sort((a, b) => {
+    if (a.hasDividends && !b.hasDividends) return -1;
+    if (!a.hasDividends && b.hasDividends) return 1;
+    return (a.percentile ?? 50) - (b.percentile ?? 50);
+  });
 
   document.getElementById('updateTime').textContent = `更新: ${new Date().toLocaleString('zh-CN')}`;
   renderSummary(allData);
@@ -234,14 +258,46 @@ async function loadAll() {
   btn.disabled = false;
 }
 
+// ====== 添加ETF ======
+function addEtf() {
+  const input = document.getElementById('addInput');
+  const code = input.value.trim();
+  if (!code || !/^\d{6}$/.test(code)) {
+    showError('请输入6位数字ETF代码');
+    return;
+  }
+
+  const pool = getPool();
+  if (pool.find(e => e.code === code)) {
+    showError('该ETF已在列表中');
+    return;
+  }
+
+  pool.push({ code, name: `ETF${code}`, market: getMarket(code) });
+  savePool(pool);
+  input.value = '';
+  loadAll();
+}
+
+// ====== 删除ETF ======
+function removeEtf(code) {
+  let pool = getPool();
+  pool = pool.filter(e => e.code !== code);
+  savePool(pool);
+  loadAll();
+}
+
+// ====== 恢复默认 ======
+function resetPool() {
+  savePool(DEFAULT_POOL.map(e => ({...e})));
+  loadAll();
+}
+
 // ====== 渲染 ======
 function renderSummary(data) {
   const bar = document.getElementById('summaryBar');
   const counts = {};
-  data.forEach(d => {
-    const l = d.signal.level;
-    counts[l] = (counts[l] || 0) + 1;
-  });
+  data.forEach(d => { const l = d.signal.level; counts[l] = (counts[l] || 0) + 1; });
 
   const chips = [
     { label: '强烈加仓', count: counts.strong_buy || 0, color: '#ff6b6b' },
@@ -251,6 +307,7 @@ function renderSummary(data) {
     { label: '适度减仓', count: counts.moderate_sell || 0, color: '#4dabf7' },
     { label: '减仓', count: counts.sell || 0, color: '#da77f2' },
     { label: '强烈减仓', count: counts.strong_sell || 0, color: '#ff6b6b' },
+    { label: '无分红', count: counts.no_data || 0, color: '#bdc3c7' },
   ];
 
   bar.innerHTML = chips.filter(c => c.count > 0).map(c =>
@@ -271,19 +328,22 @@ function renderList(data) {
   list.innerHTML = data.map(d => {
     const s = d.signal;
     const pct = d.percentile ?? 50;
-    const yieldStr = d.ttmYield > 0 ? `${d.ttmYield.toFixed(2)}%` : '--';
-    const pctStr = d.percentile != null ? `${pct.toFixed(1)}%` : '--';
+    const yieldStr = d.hasDividends && d.ttmYield > 0 ? `${d.ttmYield.toFixed(2)}%` : '--';
+    const pctStr = d.hasDividends && d.percentile != null ? `${pct.toFixed(1)}%` : '--';
 
     return `
-    <div class="etf-card" onclick="openDetail(${JSON.stringify(d.code).replace(/"/g,"'")},'${d.name}')">
+    <div class="etf-card" onclick="openDetail('${d.code}')">
       <style>.etf-card[onclick*="'${d.code}'"]::before{background:${s.color}}</style>
       <div class="card-top">
         <div>
           <div class="card-name">${d.name}</div>
           <div class="card-code">${d.code}</div>
         </div>
-        <div class="card-signal" style="background:${s.color}18;color:${s.color}">
-          ${s.text}
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="card-signal" style="background:${s.color}18;color:${s.color}">
+            ${s.text}
+          </div>
+          <button class="btn-remove" onclick="event.stopPropagation();removeEtf('${d.code}')" title="删除">×</button>
         </div>
       </div>
       <div class="card-metrics">
@@ -293,13 +353,14 @@ function renderList(data) {
         </div>
         <div class="metric">
           <div class="metric-label">TTM股息率</div>
-          <div class="metric-value" style="color:var(--accent)">${yieldStr}</div>
+          <div class="metric-value" style="color:${d.hasDividends ? 'var(--accent)' : 'var(--text-muted)'}">${yieldStr}</div>
         </div>
         <div class="metric">
           <div class="metric-label">百分位</div>
           <div class="metric-value" style="color:${s.color}">${pctStr}</div>
         </div>
       </div>
+      ${d.hasDividends ? `
       <div class="pct-bar-wrap">
         <div class="pct-bar-bg">
           <div class="pct-bar-fill" style="width:${pct}%;background:${s.color}"></div>
@@ -307,13 +368,13 @@ function renderList(data) {
         <div class="pct-bar-label">
           <span>0% 低估</span><span>50%</span><span>100% 高估</span>
         </div>
-      </div>
+      </div>` : '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">该ETF无现金分红记录，无法计算股息率</div>'}
     </div>`;
   }).join('');
 }
 
 // ====== 详情弹窗 ======
-function openDetail(code, name) {
+function openDetail(code) {
   const d = allData.find(e => e.code === code);
   if (!d) return;
 
@@ -324,7 +385,7 @@ function openDetail(code, name) {
 
   const s = d.signal;
   let chartHTML = '';
-  if (d.chartData && d.chartData.length > 10) {
+  if (d.hasDividends && d.chartData && d.chartData.length > 10) {
     chartHTML = `
       <div class="chart-container">
         <div class="chart-title">📈 股息率走势（近1年）</div>
@@ -344,7 +405,7 @@ function openDetail(code, name) {
     moderate_sell: '当前股息率偏高（后40%），估值偏贵，可适度减仓',
     sell: '当前股息率处于历史高位（后25%），估值偏高，可考虑减仓',
     strong_sell: '当前股息率处于历史极高位（后10%），估值很贵，建议大幅减仓',
-    no_data: '该ETF暂无分红记录，无法计算股息率百分位',
+    no_data: '该ETF暂无现金分红记录，无法计算股息率百分位',
   };
 
   content.innerHTML = `
@@ -356,11 +417,11 @@ function openDetail(code, name) {
       </div>
       <div class="detail-item">
         <div class="label">TTM股息率</div>
-        <div class="value" style="color:var(--accent)">${d.ttmYield > 0 ? d.ttmYield.toFixed(2)+'%' : '--'}</div>
+        <div class="value" style="color:${d.hasDividends ? 'var(--accent)' : 'var(--text-muted)'}">${d.hasDividends && d.ttmYield > 0 ? d.ttmYield.toFixed(2)+'%' : '--'}</div>
       </div>
       <div class="detail-item">
         <div class="label">百分位</div>
-        <div class="value" style="color:${s.color}">${d.percentile != null ? d.percentile.toFixed(1)+'%' : '--'}</div>
+        <div class="value" style="color:${s.color}">${d.hasDividends && d.percentile != null ? d.percentile.toFixed(1)+'%' : '--'}</div>
       </div>
       <div class="detail-item">
         <div class="label">历史分红次数</div>
@@ -373,7 +434,7 @@ function openDetail(code, name) {
     </div>
     ${chartHTML}`;
 
-  if (d.chartData && d.chartData.length > 10) {
+  if (d.hasDividends && d.chartData && d.chartData.length > 10) {
     setTimeout(() => {
       drawChart('yieldChart', d.chartData.map(c => c.date), d.chartData.map(c => c.yield), 'rgba(100,255,218,0.8)', 'rgba(100,255,218,0.1)');
       drawChart('pctChart', d.chartData.map(c => c.date), d.chartData.map(c => c.percentile), 'rgba(218,119,242,0.8)', 'rgba(218,119,242,0.1)');
@@ -395,10 +456,8 @@ function drawChart(id, dates, data, strokeColor, fillColor) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.parentElement.clientWidth - 32;
   const H = 200;
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   ctx.scale(dpr, dpr);
 
   if (!data.length) return;
@@ -409,9 +468,7 @@ function drawChart(id, dates, data, strokeColor, fillColor) {
   const chartW = W - padLeft - padRight;
   const chartH = H - padTop - padBot;
 
-  // Grid
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
     const y = padTop + (chartH / 4) * i;
     ctx.beginPath(); ctx.moveTo(padLeft, y); ctx.lineTo(W - padRight, y); ctx.stroke();
@@ -419,7 +476,6 @@ function drawChart(id, dates, data, strokeColor, fillColor) {
     ctx.fillText((max - (range / 4) * i).toFixed(1), padLeft - 6, y + 3);
   }
 
-  // X labels
   const step = Math.max(1, Math.floor(data.length / 5));
   ctx.fillStyle = '#5a6380'; ctx.font = '10px -apple-system,sans-serif'; ctx.textAlign = 'center';
   for (let i = 0; i < data.length; i += step) {
@@ -428,26 +484,18 @@ function drawChart(id, dates, data, strokeColor, fillColor) {
     ctx.fillText(`${d.getMonth()+1}/${d.getDate()}`, x, H - 8);
   }
 
-  // Line
   ctx.beginPath();
   data.forEach((v, i) => {
     const x = padLeft + (i / (data.length - 1)) * chartW;
     const y = padTop + ((max - v) / range) * chartH;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  ctx.strokeStyle = strokeColor;
-  ctx.lineWidth = 2;
-  ctx.lineJoin = 'round';
-  ctx.stroke();
+  ctx.strokeStyle = strokeColor; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
 
-  // Fill
   ctx.lineTo(padLeft + chartW, padTop + chartH);
   ctx.lineTo(padLeft, padTop + chartH);
-  ctx.closePath();
-  ctx.fillStyle = fillColor;
-  ctx.fill();
+  ctx.closePath(); ctx.fillStyle = fillColor; ctx.fill();
 
-  // Last point
   const lastX = padLeft + chartW;
   const lastY = padTop + ((max - data[data.length - 1]) / range) * chartH;
   ctx.beginPath(); ctx.arc(lastX, lastY, 4, 0, Math.PI * 2); ctx.fillStyle = strokeColor; ctx.fill();
@@ -455,6 +503,19 @@ function drawChart(id, dates, data, strokeColor, fillColor) {
   ctx.fillStyle = strokeColor; ctx.font = 'bold 11px -apple-system,sans-serif'; ctx.textAlign = 'right';
   ctx.fillText(data[data.length - 1].toFixed(2), lastX - 8, lastY - 8);
 }
+
+// ====== 错误提示 ======
+function showError(msg) {
+  const toast = document.getElementById('errorToast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ====== 回车添加 ======
+document.getElementById('addInput').addEventListener('keypress', e => {
+  if (e.key === 'Enter') addEtf();
+});
 
 // ====== Service Worker ======
 if ('serviceWorker' in navigator) {
