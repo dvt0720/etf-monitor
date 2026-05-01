@@ -1,4 +1,4 @@
-const CACHE_NAME = 'etf-monitor-v9';
+const CACHE_NAME = 'etf-monitor-v10';
 const STATIC = ['/style.css', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', e => {
